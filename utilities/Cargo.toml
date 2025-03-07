@@ -12,9 +12,6 @@ version.workspace = true
 name = "fix"
 path = "src/main.rs"
 
-[features]
-production = []
-
 [dependencies]
 csv = "1.1"
 axum.workspace = true 

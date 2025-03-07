@@ -48,7 +48,6 @@ diesel-derive-enum = { version = "2.1.0", features = ["postgres"] }
 diesel_migrations = { version = "2.2.0", default-features = false, features = [
   "postgres",
 ] }
-fake = { version = "2.10.0", features = ["derive"] }
 futures = "0.3.30"
 futures-core = "0.3.30"
 futures-util = "0.3.30"
@@ -106,3 +105,4 @@ bech32 = "0.11.0"
 reqwest = { version = "0.11.27", features = ["json", "cookies"] }
 itertools = "0.14.0"
 mimalloc = "0.1.47"
+fake = "4.4.0"

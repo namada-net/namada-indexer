@@ -473,13 +473,11 @@ async fn crawling_fn(
 
     let reward_claimers = block.pos_rewards();
 
-    let timestamp_in_sec = DateTimeUtc::now().0.timestamp();
-
     let crawler_state = ChainCrawlerState {
         last_processed_block: block_height,
         last_processed_epoch: epoch,
         first_block_in_epoch,
-        timestamp: timestamp_in_sec,
+        timestamp: chrono::Utc::now().timestamp(),
     };
 
     let rate_limits =
