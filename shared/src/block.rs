@@ -720,10 +720,18 @@ impl Block {
                     wrapper_tx.fee.gas_payer.clone(),
                     Token::Native(wrapper_tx.fee.gas_token.clone()),
                 ));
-                // If the token is not the native one also push the balanche
-                // change of the block proposer (the balance change for the
-                // native token is pushed by default)
+
+                // If the token is not the native one also push the balance
+                // change of PGF (fee reserve) and the block proposer (the
+                // balance change for the native token is pushed by default)
                 if &wrapper_tx.fee.gas_token != native_token {
+                    balance_changes.push(BalanceChange::new(
+                        Id::from(namada_sdk::address::Address::Internal(
+                            namada_sdk::address::InternalAddress::Pgf,
+                        )),
+                        Token::Native(wrapper_tx.fee.gas_token.clone()),
+                    ));
+
                     if let Some(block_proposer) =
                         &self.header.proposer_address_namada
                     {
