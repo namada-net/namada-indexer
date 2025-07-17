@@ -43,3 +43,4 @@ tokio-retry.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 bech32.workspace = true
+reqwest.workspace = true

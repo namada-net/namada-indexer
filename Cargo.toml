@@ -102,3 +102,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 validator = { version = "0.16.0", features = ["derive"] }
 vergen = "8.0.0"
 bech32 = "0.11.0"
+reqwest = { version = "0.11.27", features = ["json", "cookies"] }

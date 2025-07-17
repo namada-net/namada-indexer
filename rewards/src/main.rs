@@ -13,11 +13,11 @@ use rewards::services::{
     namada as namada_service, tendermint as tendermint_service,
 };
 use rewards::state::AppState;
+use shared::client::Client;
 use shared::crawler;
 use shared::crawler_state::{CrawlerName, IntervalCrawlerState};
 use shared::error::{AsDbError, AsRpcError, ContextDbInteractError, MainError};
 use tendermint_rpc::HttpClient;
-use tendermint_rpc::client::CompatMode;
 use tokio::time::sleep;
 
 #[tokio::main]
@@ -28,14 +28,9 @@ async fn main() -> Result<(), MainError> {
 
     tracing::info!("version: {}", env!("VERGEN_GIT_SHA").to_string());
 
-    let client = Arc::new(
-        HttpClient::builder(config.tendermint_url.as_str().parse().unwrap())
-            .compat_mode(CompatMode::V0_37)
-            .build()
-            .unwrap(),
-    );
+    let client = Client::new(&config.tendermint_url);
 
-    let chain_id = tendermint_service::query_status(&client)
+    let chain_id = tendermint_service::query_status(client.as_ref())
         .await
         .into_rpc_error()?
         .node_info
@@ -61,7 +56,7 @@ async fn main() -> Result<(), MainError> {
     if epoch.is_none() {
         loop {
             epoch = Some(
-                namada_service::get_current_epoch(&client)
+                namada_service::get_current_epoch(client.as_ref())
                     .await
                     .into_rpc_error()?,
             );
@@ -76,7 +71,7 @@ async fn main() -> Result<(), MainError> {
     }
 
     crawler::crawl(
-        move |epoch| crawling_fn(conn.clone(), client.clone(), epoch),
+        move |epoch| crawling_fn(conn.clone(), Arc::new(client.get()), epoch),
         epoch.unwrap_or(0),
         None,
     )

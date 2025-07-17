@@ -11,13 +11,13 @@ use orm::migrations::CustomMigrationSource;
 use shared::block::Block;
 use shared::block_result::BlockResult;
 use shared::checksums::Checksums;
+use shared::client::Client;
 use shared::crawler::crawl;
 use shared::crawler_state::BlockCrawlerState;
 use shared::error::{AsDbError, AsRpcError, ContextDbInteractError, MainError};
 use shared::id::Id;
 use shared::transaction::{IbcTokenAction, IbcTokenFlow};
 use tendermint_rpc::HttpClient;
-use tendermint_rpc::client::CompatMode;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 use transactions::app_state::AppState;
@@ -37,14 +37,9 @@ async fn main() -> Result<(), MainError> {
 
     config.log.init();
 
-    let client = Arc::new(
-        HttpClient::builder(config.tendermint_url.as_str().parse().unwrap())
-            .compat_mode(CompatMode::V0_37)
-            .build()
-            .unwrap(),
-    );
+    let client = Client::new(&config.tendermint_url);
 
-    let chain_id = tendermint_service::query_status(&client)
+    let chain_id = tendermint_service::query_status(client.as_ref())
         .await
         .into_rpc_error()?
         .node_info
@@ -53,7 +48,8 @@ async fn main() -> Result<(), MainError> {
 
     tracing::info!("Network chain id: {}", chain_id);
 
-    let checksums = Arc::new(Mutex::new(query_checksums(&client).await));
+    let checksums =
+        Arc::new(Mutex::new(query_checksums(client.as_ref()).await));
 
     let app_state = AppState::new(config.database_url).into_db_error()?;
     let conn = Arc::new(app_state.get_db_connection().await.into_db_error()?);
@@ -83,7 +79,7 @@ async fn main() -> Result<(), MainError> {
         move |block_height| {
             crawling_fn(
                 block_height,
-                client.clone(),
+                Arc::new(client.get()),
                 conn.clone(),
                 checksums.clone(),
                 config.backfill_from.is_none(),

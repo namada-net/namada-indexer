@@ -15,11 +15,11 @@ use parameters::repository;
 use parameters::services::{
     namada as namada_service, tendermint as tendermint_service,
 };
+use shared::client::Client;
 use shared::crawler;
 use shared::crawler_state::{CrawlerName, IntervalCrawlerState};
 use shared::error::{AsDbError, AsRpcError, ContextDbInteractError, MainError};
 use tendermint_rpc::HttpClient;
-use tendermint_rpc::client::CompatMode;
 
 #[tokio::main]
 async fn main() -> Result<(), MainError> {
@@ -27,14 +27,9 @@ async fn main() -> Result<(), MainError> {
 
     config.log.init();
 
-    let client = Arc::new(
-        HttpClient::builder(config.tendermint_url.as_str().parse().unwrap())
-            .compat_mode(CompatMode::V0_37)
-            .build()
-            .unwrap(),
-    );
+    let client = Client::new(&config.tendermint_url);
 
-    let chain_id = tendermint_service::query_status(&client)
+    let chain_id = tendermint_service::query_status(client.as_ref())
         .await
         .into_rpc_error()?
         .node_info
@@ -52,12 +47,12 @@ async fn main() -> Result<(), MainError> {
         .await
         .expect("Should be able to run migrations");
 
-    let current_epoch = namada_service::get_current_epoch(&client.clone())
+    let current_epoch = namada_service::get_current_epoch(client.as_ref())
         .await
         .into_rpc_error()?;
 
     crawler::crawl(
-        move |epoch| crawling_fn(epoch, conn.clone(), client.clone()),
+        move |epoch| crawling_fn(epoch, conn.clone(), Arc::new(client.get())),
         current_epoch,
         None,
     )

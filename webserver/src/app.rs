@@ -8,9 +8,8 @@ use axum::routing::get;
 use axum::{BoxError, Json, Router};
 use axum_prometheus::PrometheusMetricLayer;
 use lazy_static::lazy_static;
-use namada_sdk::tendermint_rpc::HttpClient;
-use namada_sdk::tendermint_rpc::client::CompatMode;
 use serde_json::json;
+use shared::client::Client;
 use tower::ServiceBuilder;
 use tower::buffer::BufferLayer;
 use tower::limit::RateLimitLayer;
@@ -43,16 +42,14 @@ impl ApplicationServer {
         let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
 
         let app_state = AppState::new(db_url, cache_url);
-        let client = HttpClient::builder(
-            config.tendermint_url.as_str().parse().unwrap(),
-        )
-        .compat_mode(CompatMode::V0_37)
-        .build()
-        .unwrap();
+        let client = Client::new(&config.tendermint_url);
 
         let routes = {
-            let common_state =
-                CommonState::new(client, config.clone(), app_state.clone());
+            let common_state = CommonState::new(
+                client.get(),
+                config.clone(),
+                app_state.clone(),
+            );
 
             Router::new()
                 .route("/pos/validator", get(pos_handlers::get_validators))

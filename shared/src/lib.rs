@@ -2,6 +2,7 @@ pub mod balance;
 pub mod block;
 pub mod block_result;
 pub mod checksums;
+pub mod client;
 pub mod crawler;
 pub mod crawler_state;
 pub mod error;

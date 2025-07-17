@@ -28,6 +28,7 @@ use shared::balance::TokenSupply;
 use shared::block::Block;
 use shared::block_result::BlockResult;
 use shared::checksums::Checksums;
+use shared::client::Client;
 use shared::crawler::crawl;
 use shared::crawler_state::ChainCrawlerState;
 use shared::error::{
@@ -39,7 +40,6 @@ use shared::token::Token;
 use shared::utils::BalanceChange;
 use shared::validator::ValidatorSet;
 use tendermint_rpc::HttpClient;
-use tendermint_rpc::client::CompatMode;
 use tendermint_rpc::endpoint::block::Response as TendermintBlockResponse;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
@@ -50,13 +50,9 @@ use tokio_retry::strategy::{ExponentialBackoff, jitter};
 async fn main() -> Result<(), MainError> {
     let config = AppConfig::parse();
 
-    let client =
-        HttpClient::builder(config.tendermint_url.as_str().parse().unwrap())
-            .compat_mode(CompatMode::V0_37)
-            .build()
-            .unwrap();
+    let client = Client::new(&config.tendermint_url);
 
-    let chain_id = tendermint_service::query_status(&client)
+    let chain_id = tendermint_service::query_status(client.as_ref())
         .await
         .into_rpc_error()?
         .node_info
@@ -65,11 +61,10 @@ async fn main() -> Result<(), MainError> {
 
     tracing::info!("Network chain id: {}", chain_id);
 
-    let checksums = Arc::new(Mutex::new(query_checksums(&client).await));
+    let checksums =
+        Arc::new(Mutex::new(query_checksums(client.as_ref()).await));
 
     config.log.init();
-
-    let client = Arc::new(client);
 
     let app_state = AppState::new(config.database_url).into_db_error()?;
     let conn = Arc::new(app_state.get_db_connection().await.into_db_error()?);
@@ -83,7 +78,7 @@ async fn main() -> Result<(), MainError> {
     rlimit::increase_nofile_limit(10240).unwrap();
     rlimit::increase_nofile_limit(u64::MAX).unwrap();
 
-    let last_block_height = namada_service::get_last_block(&client)
+    let last_block_height = namada_service::get_last_block(client.as_ref())
         .await
         .into_rpc_error()?;
     let crawler_state = db_service::try_get_chain_crawler_state(&conn)
@@ -117,7 +112,7 @@ async fn main() -> Result<(), MainError> {
             // Try to run crawler_fn with the last processed block
             let crawl_result = crawling_fn(
                 crawler_state.last_processed_block,
-                client.clone(),
+                Arc::new(client.get()),
                 conn.clone(),
                 checksums.clone(),
                 true,
@@ -179,7 +174,7 @@ async fn main() -> Result<(), MainError> {
         Some(state) => {
             if config.reindex_bonds {
                 let (bonds, unbonds) =
-                    query_all_bonds_and_unbonds(&client, None, None)
+                    query_all_bonds_and_unbonds(client.as_ref(), None, None)
                         .await
                         .into_rpc_error()?;
                 conn.interact(move |conn| {
@@ -208,7 +203,7 @@ async fn main() -> Result<(), MainError> {
         None => {
             let checksums = checksums.lock().await;
             initial_query(
-                &client,
+                client.as_ref(),
                 &conn,
                 &checksums,
                 config.initial_query_retry_time,
@@ -226,7 +221,7 @@ async fn main() -> Result<(), MainError> {
         move |block_height| {
             crawling_fn(
                 block_height,
-                client.clone(),
+                Arc::new(client.get()),
                 conn.clone(),
                 checksums.clone(),
                 config.backfill_from.is_none(),
