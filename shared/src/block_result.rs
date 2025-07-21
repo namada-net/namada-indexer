@@ -33,6 +33,7 @@ pub enum EventKind {
     FungibleTokenPacket,
     MaspFeePayment,
     MaspTransfer,
+    TxWasmName,
     Unknown,
 }
 
@@ -40,6 +41,7 @@ impl From<&String> for EventKind {
     fn from(value: &String) -> Self {
         match value.as_str() {
             "tx/applied" => Self::Applied,
+            "tx/tx-wasm-name" => Self::TxWasmName,
             "send_packet" => Self::IbcCore(IbcCorePacketKind::Send),
             "recv_packet" => Self::IbcCore(IbcCorePacketKind::Recv),
             "fungible_token_packet" => Self::FungibleTokenPacket,
@@ -218,6 +220,10 @@ pub enum TxAttributesType {
     },
     MaspFeePayment(MaspTxData),
     MaspTransfer(MaspTxData),
+    WasmName {
+        name: String,
+        inner_tx_hash: Id,
+    },
 }
 
 impl TxAttributesType {
@@ -354,6 +360,17 @@ impl TxAttributesType {
                     IndexedTx::read_from_event_attributes(attributes).unwrap();
 
                 Some(Self::MaspTransfer(MaspTxData { indexed_tx, data }))
+            }
+            EventKind::TxWasmName => {
+                let name = attributes.get("code-name").unwrap().to_string();
+                let inner_tx_hash = Id::Hash(
+                    attributes.get("inner-tx-hash").unwrap().to_string(),
+                );
+
+                Some(Self::WasmName {
+                    name,
+                    inner_tx_hash,
+                })
             }
         }
     }

@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, HashSet};
-use std::str::FromStr;
 
 use namada_ibc::IbcMessage;
 use namada_ibc::core::channel::types::msgs::{MsgRecvPacket, PacketMsg};
@@ -32,14 +31,6 @@ use crate::vote::GovernanceVote;
 pub type Epoch = u32;
 pub type BlockHeight = u32;
 
-#[derive(Debug, Clone)]
-pub enum EventKind {
-    Applied,
-    Rejected,
-    Accepted,
-    Unknown,
-}
-
 #[derive(Debug, Clone, Default, Copy)]
 pub enum TxEventStatusCode {
     Ok,
@@ -52,49 +43,6 @@ impl From<&str> for TxEventStatusCode {
         match value {
             "0" => Self::Ok,
             _ => Self::Fail,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct TxAttributes {
-    pub code: TxEventStatusCode,
-    pub gas: u64,
-    pub hash: Id,
-    pub height: u64,
-    pub info: String,
-}
-
-impl TxAttributes {
-    pub fn deserialize(
-        event_kind: &EventKind,
-        attributes: &BTreeMap<String, String>,
-    ) -> Self {
-        match event_kind {
-            EventKind::Unknown => Self::default(),
-            _ => Self {
-                code: attributes
-                    .get("code")
-                    .map(|code| TxEventStatusCode::from(code.as_str()))
-                    .unwrap()
-                    .to_owned(),
-                gas: attributes
-                    .get("gas_used")
-                    .map(|gas| u64::from_str(gas).unwrap())
-                    .unwrap()
-                    .to_owned(),
-                hash: attributes
-                    .get("hash")
-                    .map(|hash| Id::Hash(hash.to_lowercase()))
-                    .unwrap()
-                    .to_owned(),
-                height: attributes
-                    .get("height")
-                    .map(|height| u64::from_str(height).unwrap())
-                    .unwrap()
-                    .to_owned(),
-                info: attributes.get("info").unwrap().to_owned(),
-            },
         }
     }
 }

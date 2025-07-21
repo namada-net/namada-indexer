@@ -21,7 +21,7 @@ use namada_tx::{IndexedTx, Section, Tx};
 use serde::Serialize;
 
 use crate::block::BlockHeight;
-use crate::block_result::{BlockResult, TxEventStatusCode};
+use crate::block_result::{BlockResult, TxAttributesType, TxEventStatusCode};
 use crate::checksums::Checksums;
 use crate::id::Id;
 use crate::ser::{IbcMessage, TransferData};
@@ -447,31 +447,43 @@ impl Transaction {
                                 bytes,
                             ))
                             .unwrap()
-                        });
+                        })
+                        .expect("tx code id must always be present");
 
                     let tx_data =
                         transaction.data(&tx_commitment).unwrap_or_default();
 
-                    let tx_kind = if let Some(id) = tx_code_id {
-                        if let Some(tx_kind_name) =
-                            checksums.get_name_by_id(&id)
-                        {
-                            TransactionKind::from(
-                                &id,
-                                &tx_kind_name,
-                                &tx_data,
-                                native_token.to_owned(),
+                    let tx_kind_name = block_results
+                        .begin_events
+                        .iter()
+                        .chain(block_results.end_events.iter())
+                        .find_map(|event| {
+                            event.attributes.as_ref().and_then(
+                                |attr| match attr {
+                                    TxAttributesType::WasmName {
+                                        name,
+                                        inner_tx_hash: h,
+                                    } if !name.is_empty()
+                                        && *h == inner_tx_id =>
+                                    {
+                                        Some(name.clone())
+                                    }
+                                    _ => None,
+                                },
                             )
-                        } else {
-                            TransactionKind::Unknown(Some(UnknownTransaction {
-                                id: Some(id),
-                                name: None,
-                                data: Some(tx_data.clone()),
-                            }))
-                        }
+                        })
+                        .or_else(|| checksums.get_name_by_id(&tx_code_id));
+
+                    let tx_kind = if let Some(tx_kind_name) = tx_kind_name {
+                        TransactionKind::from(
+                            &tx_code_id,
+                            &tx_kind_name,
+                            &tx_data,
+                            native_token.to_owned(),
+                        )
                     } else {
                         TransactionKind::Unknown(Some(UnknownTransaction {
-                            id: None,
+                            id: Some(tx_code_id),
                             name: None,
                             data: Some(tx_data.clone()),
                         }))
