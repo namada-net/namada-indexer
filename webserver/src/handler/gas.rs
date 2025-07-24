@@ -5,7 +5,7 @@ use axum_macros::debug_handler;
 
 use crate::dto::gas::GasEstimateQuery;
 use crate::error::api::ApiError;
-use crate::response::gas::{GasEstimate, GasPrice};
+use crate::response::gas::{GasEstimateResponse, GasPriceResponse};
 use crate::state::common::CommonState;
 
 #[debug_handler]
@@ -13,20 +13,30 @@ pub async fn get_gas_price_by_token(
     _headers: HeaderMap,
     Path(token): Path<String>,
     State(state): State<CommonState>,
-) -> Result<Json<Vec<GasPrice>>, ApiError> {
-    let gas_price = state.gas_service.get_gas_price_by_token(token).await?;
+) -> Result<Json<Vec<GasPriceResponse>>, ApiError> {
+    let gas_prices = state.gas_service.get_gas_price_by_token(token).await?;
 
-    Ok(Json(gas_price))
+    let response = gas_prices
+        .into_iter()
+        .map(|gas_price| gas_price.into())
+        .collect();
+
+    Ok(Json(response))
 }
 
 #[debug_handler]
 pub async fn get_all_gas_prices(
     _headers: HeaderMap,
     State(state): State<CommonState>,
-) -> Result<Json<Vec<GasPrice>>, ApiError> {
-    let gas_price = state.gas_service.get_all_gas_prices().await?;
+) -> Result<Json<Vec<GasPriceResponse>>, ApiError> {
+    let gas_prices = state.gas_service.get_all_gas_prices().await?;
 
-    Ok(Json(gas_price))
+    let response = gas_prices
+        .into_iter()
+        .map(|gas_price| gas_price.into())
+        .collect();
+
+    Ok(Json(response))
 }
 
 #[debug_handler]
@@ -34,7 +44,7 @@ pub async fn get_gas_estimate(
     _headers: HeaderMap,
     Query(query): Query<GasEstimateQuery>,
     State(state): State<CommonState>,
-) -> Result<Json<GasEstimate>, ApiError> {
+) -> Result<Json<GasEstimateResponse>, ApiError> {
     query.is_valid()?;
 
     let gas = state
@@ -59,5 +69,12 @@ pub async fn get_gas_estimate(
         )
         .await?;
 
-    Ok(Json(gas))
+    let response = GasEstimateResponse {
+        min: gas.min,
+        max: gas.max,
+        avg: gas.avg,
+        total_estimates: gas.total_estimates,
+    };
+
+    Ok(Json(response))
 }

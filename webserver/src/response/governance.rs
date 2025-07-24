@@ -1,53 +1,49 @@
 use std::fmt::Display;
 
-use orm::crawler_state::ChainCrawlerStateDb;
-use orm::governance_proposal::{
-    GovernanceProposalDb, GovernanceProposalKindDb, GovernanceProposalResultDb,
-    GovernanceProposalTallyTypeDb,
-};
-use orm::governance_votes::{GovernanceProposalVoteDb, GovernanceVoteKindDb};
 use serde::{Deserialize, Serialize};
-use sha256::digest;
-use subtle_encoding::hex;
 
-use super::utils::{epoch_progress, time_between_epochs};
+use crate::entity::governance::{
+    Proposal, ProposalStatus, ProposalType, ProposalVote, TallyType, VoteType,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum ProposalType {
+pub enum ProposalTypeResponse {
     Default,
     DefaultWithWasm,
     PgfSteward,
     PgfFunding,
 }
 
-impl Display for ProposalType {
+impl Display for ProposalTypeResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProposalType::Default => write!(f, "default"),
-            ProposalType::DefaultWithWasm => write!(f, "default_with_wasm"),
-            ProposalType::PgfSteward => write!(f, "pgf_steward"),
-            ProposalType::PgfFunding => write!(f, "pgf_funding"),
+            ProposalTypeResponse::Default => write!(f, "default"),
+            ProposalTypeResponse::DefaultWithWasm => {
+                write!(f, "default_with_wasm")
+            }
+            ProposalTypeResponse::PgfSteward => write!(f, "pgf_steward"),
+            ProposalTypeResponse::PgfFunding => write!(f, "pgf_funding"),
         }
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum TallyType {
+pub enum TallyTypeResponse {
     TwoFifths,
     OneHalfOverOneThird,
     LessOneHalfOverOneThirdNay,
 }
 
-impl Display for TallyType {
+impl Display for TallyTypeResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TallyType::TwoFifths => write!(f, "two_fifths"),
-            TallyType::OneHalfOverOneThird => {
+            TallyTypeResponse::TwoFifths => write!(f, "two_fifths"),
+            TallyTypeResponse::OneHalfOverOneThird => {
                 write!(f, "one_half_over_one_third")
             }
-            TallyType::LessOneHalfOverOneThirdNay => {
+            TallyTypeResponse::LessOneHalfOverOneThirdNay => {
                 write!(f, "less_one_half_over_one_third_nay")
             }
         }
@@ -56,16 +52,27 @@ impl Display for TallyType {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum VoteType {
+pub enum VoteTypeResponse {
     Yay,
     Nay,
     Abstain,
     Unknown,
 }
 
+impl Display for VoteTypeResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VoteTypeResponse::Yay => write!(f, "yay"),
+            VoteTypeResponse::Nay => write!(f, "nay"),
+            VoteTypeResponse::Abstain => write!(f, "abstain"),
+            VoteTypeResponse::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum ProposalStatus {
+pub enum ProposalStatusResponse {
     Pending,
     Rejected,
     Passed,
@@ -75,155 +82,89 @@ pub enum ProposalStatus {
     Unknown,
 }
 
-impl Display for ProposalStatus {
+impl Display for ProposalStatusResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProposalStatus::Pending => write!(f, "Pending"),
-            ProposalStatus::Rejected => write!(f, "Rejected"),
-            ProposalStatus::Passed => write!(f, "Passed"),
-            ProposalStatus::Voting => write!(f, "Voting"),
-            ProposalStatus::ExecutedPassed => write!(f, "ExecutedPassed"),
-            ProposalStatus::ExecutedRejected => write!(f, "ExecutedRejected"),
-            ProposalStatus::Unknown => write!(f, "Unknown"),
+            ProposalStatusResponse::Pending => write!(f, "Pending"),
+            ProposalStatusResponse::Rejected => write!(f, "Rejected"),
+            ProposalStatusResponse::Passed => write!(f, "Passed"),
+            ProposalStatusResponse::Voting => write!(f, "Voting"),
+            ProposalStatusResponse::ExecutedPassed => {
+                write!(f, "ExecutedPassed")
+            }
+            ProposalStatusResponse::ExecutedRejected => {
+                write!(f, "ExecutedRejected")
+            }
+            ProposalStatusResponse::Unknown => write!(f, "Unknown"),
         }
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Proposal {
-    pub id: String,
+pub struct ProposalResponse {
+    pub id: u64,
     pub content: String,
-    pub r#type: ProposalType,
-    pub tally_type: TallyType,
+    pub r#type: ProposalTypeResponse,
+    pub tally_type: TallyTypeResponse,
     pub data: Option<String>,
     pub author: String,
-    pub start_epoch: String,
-    pub end_epoch: String,
-    pub activation_epoch: String,
+    pub start_epoch: u64,
+    pub end_epoch: u64,
+    pub activation_epoch: u64,
     pub start_time: String,
     pub end_time: String,
     pub current_time: String,
     pub activation_time: String,
-    pub status: ProposalStatus,
-    pub yay_votes: String,
-    pub nay_votes: String,
-    pub abstain_votes: String,
+    pub status: ProposalStatusResponse,
+    pub yay_votes: f64,
+    pub nay_votes: f64,
+    pub abstain_votes: f64,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProposalVote {
-    pub proposal_id: u64,
-    pub vote: VoteType,
-    pub voter_address: String,
-}
-
-impl Proposal {
-    pub fn from_proposal_db(
-        value: GovernanceProposalDb,
-        chain_state: &ChainCrawlerStateDb,
-        max_block_time: i32,
-        min_duration: i32,
-    ) -> Self {
-        let blocks_per_epoch = min_duration / max_block_time;
-
-        let epoch_progress = epoch_progress(
-            chain_state.last_processed_block,
-            chain_state.first_block_in_epoch,
-            blocks_per_epoch,
-        );
-
-        let to_start = time_between_epochs(
-            blocks_per_epoch,
-            epoch_progress,
-            chain_state.last_processed_epoch,
-            value.start_epoch,
-            min_duration,
-        );
-
-        let to_end = time_between_epochs(
-            blocks_per_epoch,
-            epoch_progress,
-            chain_state.last_processed_epoch,
-            value.end_epoch,
-            min_duration,
-        );
-
-        let to_activation = time_between_epochs(
-            blocks_per_epoch,
-            epoch_progress,
-            chain_state.last_processed_epoch,
-            value.activation_epoch,
-            min_duration,
-        );
-
-        let time_now = chain_state.timestamp.and_utc().timestamp();
-        let start_time = time_now + i64::from(to_start);
-        let end_time = time_now + i64::from(to_end);
-        let activation_time = time_now + i64::from(to_activation);
-
+impl From<Proposal> for ProposalResponse {
+    fn from(value: Proposal) -> Self {
         Self {
-            id: value.id.to_string(),
+            id: value.id,
             content: value.content,
-            r#type: match value.kind {
-                GovernanceProposalKindDb::PgfSteward => {
-                    ProposalType::PgfSteward
+            r#type: match value.r#type {
+                ProposalType::Default => ProposalTypeResponse::Default,
+                ProposalType::DefaultWithWasm => {
+                    ProposalTypeResponse::DefaultWithWasm
                 }
-                GovernanceProposalKindDb::PgfFunding => {
-                    ProposalType::PgfFunding
-                }
-                GovernanceProposalKindDb::Default => ProposalType::Default,
-                GovernanceProposalKindDb::DefaultWithWasm => {
-                    ProposalType::DefaultWithWasm
-                }
+                ProposalType::PgfSteward => ProposalTypeResponse::PgfSteward,
+                ProposalType::PgfFunding => ProposalTypeResponse::PgfFunding,
             },
             tally_type: match value.tally_type {
-                GovernanceProposalTallyTypeDb::TwoFifths => {
-                    TallyType::TwoFifths
+                TallyType::TwoFifths => TallyTypeResponse::TwoFifths,
+                TallyType::OneHalfOverOneThird => {
+                    TallyTypeResponse::OneHalfOverOneThird
                 }
-                GovernanceProposalTallyTypeDb::OneHalfOverOneThird => {
-                    TallyType::OneHalfOverOneThird
-                }
-                GovernanceProposalTallyTypeDb::LessOneHalfOverOneThirdNay => {
-                    TallyType::LessOneHalfOverOneThirdNay
+                TallyType::LessOneHalfOverOneThirdNay => {
+                    TallyTypeResponse::LessOneHalfOverOneThirdNay
                 }
             },
-            data: match value.kind {
-                GovernanceProposalKindDb::DefaultWithWasm => {
-                    value.data.map(|data| {
-                        let hex_decoded_bytes =
-                            hex::decode(data).unwrap_or_default();
-                        digest(hex_decoded_bytes)
-                    })
+            data: value.data,
+            author: value.author.to_string(),
+            start_epoch: value.start_epoch,
+            end_epoch: value.end_epoch,
+            activation_epoch: value.activation_epoch,
+            start_time: value.start_time,
+            end_time: value.end_time,
+            current_time: value.current_time,
+            activation_time: value.activation_time,
+            status: match value.status {
+                ProposalStatus::Pending => ProposalStatusResponse::Pending,
+                ProposalStatus::Rejected => ProposalStatusResponse::Rejected,
+                ProposalStatus::Passed => ProposalStatusResponse::Passed,
+                ProposalStatus::Voting => ProposalStatusResponse::Voting,
+                ProposalStatus::ExecutedPassed => {
+                    ProposalStatusResponse::ExecutedPassed
                 }
-                _ => value.data,
-            },
-            author: value.author,
-            start_epoch: value.start_epoch.to_string(),
-            end_epoch: value.end_epoch.to_string(),
-            activation_epoch: value.activation_epoch.to_string(),
-            start_time: start_time.to_string(),
-            end_time: end_time.to_string(),
-            current_time: time_now.to_string(),
-            activation_time: activation_time.to_string(),
-
-            status: match value.result {
-                GovernanceProposalResultDb::Passed => ProposalStatus::Passed,
-                GovernanceProposalResultDb::Rejected => {
-                    ProposalStatus::Rejected
+                ProposalStatus::ExecutedRejected => {
+                    ProposalStatusResponse::ExecutedRejected
                 }
-                GovernanceProposalResultDb::Pending => ProposalStatus::Pending,
-                GovernanceProposalResultDb::Unknown => ProposalStatus::Unknown,
-                GovernanceProposalResultDb::ExecutedPassed => {
-                    ProposalStatus::ExecutedPassed
-                }
-                GovernanceProposalResultDb::ExecutedRejected => {
-                    ProposalStatus::ExecutedRejected
-                }
-                GovernanceProposalResultDb::VotingPeriod => {
-                    ProposalStatus::Voting
-                }
+                ProposalStatus::Unknown => ProposalStatusResponse::Unknown,
             },
             yay_votes: value.yay_votes,
             nay_votes: value.nay_votes,
@@ -232,17 +173,25 @@ impl Proposal {
     }
 }
 
-impl From<GovernanceProposalVoteDb> for ProposalVote {
-    fn from(value: GovernanceProposalVoteDb) -> Self {
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalVoteResponse {
+    pub proposal_id: u64,
+    pub vote: VoteTypeResponse,
+    pub voter_address: String,
+}
+
+impl From<ProposalVote> for ProposalVoteResponse {
+    fn from(value: ProposalVote) -> Self {
         Self {
-            proposal_id: value.proposal_id as u64,
-            vote: match value.kind {
-                GovernanceVoteKindDb::Nay => VoteType::Nay,
-                GovernanceVoteKindDb::Yay => VoteType::Yay,
-                GovernanceVoteKindDb::Abstain => VoteType::Abstain,
-                GovernanceVoteKindDb::Unknown => VoteType::Unknown,
+            proposal_id: value.proposal_id,
+            vote: match value.vote {
+                VoteType::Yay => VoteTypeResponse::Yay,
+                VoteType::Nay => VoteTypeResponse::Nay,
+                VoteType::Abstain => VoteTypeResponse::Abstain,
+                VoteType::Unknown => VoteTypeResponse::Unknown,
             },
-            voter_address: value.voter_address,
+            voter_address: value.voter_address.to_string(),
         }
     }
 }

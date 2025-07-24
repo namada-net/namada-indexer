@@ -1,7 +1,7 @@
 use crate::appstate::AppState;
+use crate::entity::masp::MaspPoolAggregate;
 use crate::error::masp::MaspError;
 use crate::repository::masp::{MaspRepository, MaspRepositoryTrait};
-use crate::response::masp::MaspPoolAggregateResponse;
 
 #[derive(Clone)]
 pub struct MaspService {
@@ -18,7 +18,7 @@ impl MaspService {
     pub async fn find_all_masp_aggregates(
         &self,
         token: Option<String>,
-    ) -> Result<Vec<MaspPoolAggregateResponse>, MaspError> {
+    ) -> Result<Vec<MaspPoolAggregate>, MaspError> {
         let masp_aggregates = match token {
             Some(token) => self
                 .masp_repo
@@ -26,7 +26,7 @@ impl MaspService {
                 .await
                 .map_err(MaspError::Database)?
                 .into_iter()
-                .map(MaspPoolAggregateResponse::from)
+                .map(MaspPoolAggregate::from)
                 .collect(),
             None => self
                 .masp_repo
@@ -34,7 +34,7 @@ impl MaspService {
                 .await
                 .map_err(MaspError::Database)?
                 .into_iter()
-                .map(MaspPoolAggregateResponse::from)
+                .map(MaspPoolAggregate::from)
                 .collect(),
         };
 

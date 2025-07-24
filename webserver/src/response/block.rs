@@ -1,47 +1,54 @@
-use orm::blocks::BlockDb;
-use orm::transactions::WrapperTransactionDb;
 use serde::{Deserialize, Serialize};
+
+use crate::entity::block::Block;
+use crate::entity::transaction::{InnerTransaction, WrapperTransaction};
+use crate::response::transaction::ShortInnerTransactionResponse;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Block {
-    pub height: i32,
+pub struct BlockResponse {
+    pub height: u64,
     pub hash: Option<String>,
     pub app_hash: Option<String>,
     pub timestamp: Option<String>,
     pub proposer: Option<String>,
     pub transactions: Vec<String>,
     pub parent_app_hash: Option<String>,
+    pub masp_fee_payment: Option<ShortInnerTransactionResponse>,
     pub parent_hash: Option<String>,
     pub epoch: Option<String>,
 }
 
-impl Block {
+impl BlockResponse {
     pub fn from(
-        block_db: BlockDb,
-        prev_block_db: Option<BlockDb>,
-        transactions: Vec<WrapperTransactionDb>,
+        block: Block,
+        prev_block: Option<Block>,
+        transactions: Vec<WrapperTransaction>,
+        masp_fee_payment: Option<InnerTransaction>,
     ) -> Self {
         Self {
-            height: block_db.height,
-            hash: block_db.hash,
-            app_hash: block_db.app_hash,
-            timestamp: block_db
+            height: block.height,
+            hash: block.hash.map(|hash| hash.to_string()),
+            app_hash: block.app_hash.map(|app_hash| app_hash.to_string()),
+            timestamp: block
                 .timestamp
                 .map(|t| t.and_utc().timestamp().to_string()),
-            proposer: block_db.proposer,
+            proposer: block.proposer.map(|proposer| proposer.to_string()),
             transactions: transactions
                 .into_iter()
-                .map(|wrapper| wrapper.id.to_lowercase())
+                .map(|wrapper| wrapper.id.to_string())
                 .collect(),
-            parent_app_hash: prev_block_db
-                .clone()
+            masp_fee_payment: masp_fee_payment
+                .map(ShortInnerTransactionResponse::from),
+            parent_app_hash: prev_block
                 .map(|block| block.app_hash)
-                .unwrap_or(None),
-            parent_hash: prev_block_db
-                .map(|block| block.app_hash)
-                .unwrap_or(None),
-            epoch: block_db.epoch.map(|e| e.to_string()),
+                .unwrap_or(None)
+                .map(|hash| hash.to_string()),
+            parent_hash: prev_block
+                .map(|block| block.hash)
+                .unwrap_or(None)
+                .map(|hash| hash.to_string()),
+            epoch: block.epoch.map(|e| e.to_string()),
         }
     }
 }
