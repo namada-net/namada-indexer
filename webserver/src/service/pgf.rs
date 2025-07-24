@@ -50,15 +50,16 @@ impl PgfService {
         Ok((payments, total_pages as u64, total_items as u64))
     }
 
-    pub async fn find_pfg_payment_by_proposal_id(
+    pub async fn find_pfg_payments_by_proposal_id(
         &self,
         proposal_id: u64,
-    ) -> Result<Option<PgfPayment>, PgfError> {
+    ) -> Result<Vec<PgfPayment>, PgfError> {
         let payment = self
             .pgf_repo
-            .find_pgf_payment_by_proposal_id(proposal_id as i32)
+            .find_pgf_payments_by_proposal_id(proposal_id as i32)
             .await
             .map_err(PgfError::Database)?
+            .into_iter()
             .map(|payment| PgfPayment {
                 recurrence: match payment.payment_recurrence {
                     PaymentRecurrenceDb::Continuous => {
@@ -73,7 +74,8 @@ impl PgfService {
                 },
                 receipient: Id::Account(payment.receipient),
                 amount: payment.amount.into(),
-            });
+            })
+            .collect();
 
         Ok(payment)
     }
