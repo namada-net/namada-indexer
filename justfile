@@ -21,6 +21,9 @@ fmt:
 fmt-check:
     cargo +{{ RUST_NIGTHLY }} fmt --all --check
 
+taplo:
+    taplo fmt
+
 test:
     cargo +{{ RUST_STABLE }} test
 

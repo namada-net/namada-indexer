@@ -52,6 +52,8 @@ pub enum TransactionKindResponse {
     DeactivateValidator,
     ReactivateValidator,
     UnjailValidator,
+    InitAccount,
+    ChangeConsensusKey,
     Unknown,
 }
 
@@ -98,7 +100,7 @@ pub struct WrapperTransactionResponse {
     pub fee_token: TokenResponse,
     pub gas_limit: String,
     pub gas_used: Option<u64>,
-    pub amount_per_gas_unit: Option<String>,
+    pub amount_per_gas_unit: Option<f64>,
     pub block_height: u64,
     pub inner_transactions: Vec<ShortInnerTransactionResponse>,
     pub exit_code: TransactionResultResponse,
@@ -166,6 +168,18 @@ impl InnerTransactionResponse {
             data: inner.data,
             memo: inner.memo,
             exit_code: TransactionResultResponse::from(inner.exit_code),
+        }
+    }
+}
+
+impl From<InnerTransaction> for ShortInnerTransactionResponse {
+    fn from(value: InnerTransaction) -> Self {
+        ShortInnerTransactionResponse {
+            id: value.id.to_string(),
+            kind: value.kind.into(),
+            data: value.data,
+            memo: value.memo,
+            exit_code: TransactionResultResponse::from(value.exit_code),
         }
     }
 }

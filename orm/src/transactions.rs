@@ -35,6 +35,8 @@ pub enum TransactionKindDb {
     ReactivateValidator,
     DeactivateValidator,
     UnjailValidator,
+    ChangeConsensusKey,
+    InitAccount,
     Unknown,
 }
 
@@ -48,6 +50,8 @@ impl From<TransactionKind> for TransactionKindDb {
             TransactionKind::UnshieldingTransfer(_) => {
                 Self::UnshieldingTransfer
             }
+            TransactionKind::InitAccount(_) => Self::InitAccount,
+            TransactionKind::ChangeConsensusKey(_) => Self::ChangeConsensusKey,
             TransactionKind::ShieldingTransfer(_) => Self::ShieldingTransfer,
             TransactionKind::MixedTransfer(_) => Self::MixedTransfer,
             TransactionKind::IbcMsg(_) => Self::IbcMsgTransfer,
@@ -136,6 +140,7 @@ pub struct WrapperTransactionDb {
     pub gas_limit: String,
     pub gas_used: Option<i32>,
     pub amount_per_gas_unit: Option<String>,
+    pub masp_fee_payment: Option<String>,
     pub block_height: i32,
     pub exit_code: TransactionResultDb,
     pub atomic: bool,
@@ -152,6 +157,7 @@ impl WrapperTransactionInsertDb {
             gas_limit: tx.fee.gas,
             gas_used: tx.fee.gas_used.map(|gas| gas as i32),
             amount_per_gas_unit: Some(tx.fee.amount_per_gas_unit),
+            masp_fee_payment: tx.fee.masp_fee_payment.map(|id| id.to_string()),
             block_height: tx.block_height as i32,
             exit_code: TransactionResultDb::from(tx.exit_code),
             atomic: tx.atomic,

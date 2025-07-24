@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bimap::BiMap;
 use namada_sdk::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
@@ -11,25 +13,66 @@ use namada_sdk::tx::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct Checksums(BiMap<String, String>);
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Checksums {
+    current: BiMap<String, String>,
+    fallback: HashMap<String, String>,
+}
+
+impl Default for Checksums {
+    fn default() -> Self {
+        // This hashmap contains historical transactions id -> name
+        let mut fallback = HashMap::new();
+
+        // https://github.com/anoma/namada-mainnet-genesis/tree/main/wasm
+        fallback.insert(
+            "6d753db0390e7cec16729fc405bfe41384c93bd79f42b8b8be41b22edbbf1b7c"
+                .to_string(),
+            "tx_transfer".to_string(),
+        );
+        fallback.insert(
+            "cecb1f1b75cd649915423c5e68be20c5232f94ab57a11a908dc66751bbdc4f72"
+                .to_string(),
+            "tx_ibc".to_string(),
+        );
+        fallback.insert(
+            "b6a1f7e069360650d2c6a1bdd2e5f4e18bb748d35dad02c31c027673fa042d8c"
+                .to_string(),
+            "tx_claim_rewards".to_string(),
+        );
+        fallback.insert(
+            "b74104949ac0c35ee922fdc3f3db454627742e2483d79550c12fcf31755c6d01"
+                .to_string(),
+            "tx_claim_rewards".to_string(),
+        );
+        fallback.insert(
+            "ef687f96ec919f5da2e90f125a2800f198a06bcd609a37e5a9ec90d442e32239"
+                .to_string(),
+            "tx_transfer".to_string(),
+        );
+
+        Self {
+            current: Default::default(),
+            fallback,
+        }
+    }
+}
 
 impl Checksums {
     pub fn get_name_by_id(&self, hash: &str) -> Option<String> {
-        self.0.get_by_right(hash).map(|data| data.to_owned())
-    }
-
-    pub fn get_id_by_name(&self, name: &str) -> Option<String> {
-        self.0.get_by_left(name).map(|data| data.to_owned())
+        self.current
+            .get_by_right(hash)
+            .cloned()
+            .or_else(|| self.fallback.get(hash).cloned())
     }
 
     pub fn add(&mut self, key: String, value: String) {
         let key = key.strip_suffix(".wasm").unwrap().to_owned();
-        self.0.insert(key, value);
+        self.current.insert(key, value);
     }
 
     pub fn add_with_ext(&mut self, key: String, value: String) {
-        self.0.insert(key, value);
+        self.current.insert(key, value);
     }
 
     pub fn code_paths() -> Vec<String> {

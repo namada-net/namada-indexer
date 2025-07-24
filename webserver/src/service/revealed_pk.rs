@@ -4,6 +4,7 @@ use namada_sdk::address::Address as NamadaAddress;
 use namada_sdk::rpc;
 use namada_sdk::tendermint_rpc::HttpClient;
 use orm::revealed_pk::RevealedPkInsertDb;
+use shared::utils;
 
 use crate::appstate::AppState;
 use crate::entity::pk::RevealedPk;
@@ -27,6 +28,10 @@ impl RevealedPkService {
         client: &HttpClient,
         address: String,
     ) -> Result<RevealedPk, RevealedPkError> {
+        if !utils::is_valid_bech32_address(&address, "tnam") {
+            return Err(RevealedPkError::InvalidAddress(address));
+        }
+
         // We look for a revealed public key in the database
         let revealed_pk_db = self
             .revealed_pk_repo
@@ -41,7 +46,9 @@ impl RevealedPkService {
             // for it in the storage
             None => {
                 let address =
-                    NamadaAddress::from_str(&address).expect("Invalid address");
+                    NamadaAddress::from_str(&address).map_err(|_| {
+                        RevealedPkError::InvalidAddress(address.clone())
+                    })?;
 
                 let public_key = rpc::get_public_key_at(client, &address, 0)
                     .await

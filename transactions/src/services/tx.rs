@@ -211,7 +211,9 @@ pub fn get_gas_estimates(
                     let notes = tx.notes;
                     gas_estimate.increase_ibc_unshielding_transfer(notes)
                 }
-                TransactionKind::IbcMsg(_)
+                TransactionKind::ChangeConsensusKey(_)
+                | TransactionKind::IbcMsg(_)
+                | TransactionKind::InitAccount(_)
                 | TransactionKind::InitProposal(_)
                 | TransactionKind::MetadataChange(_)
                 | TransactionKind::CommissionChange(_)

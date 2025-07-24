@@ -8,6 +8,12 @@ pub struct AppConfig {
     #[clap(long, env, default_value_t = 60)]
     pub sleep_for: u64,
 
+    #[clap(
+        long,
+        help = "Crawl from given epoch and do not update crawler_state"
+    )]
+    pub backfill_from: Option<u32>,
+
     #[clap(long, env)]
     pub database_url: String,
 

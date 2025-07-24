@@ -13,20 +13,63 @@ use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 use subtle_encoding::hex;
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ChainAddress {
+    /// On chain account
+    ChainAccount(NamadaAccount),
+    /// Address of the ibc token receiver
+    IbcPfmAccount(String, Address),
+    /// External address
+    ExternalAccount(String, Address),
+}
+
+impl ChainAddress {
+    pub fn owner(&self) -> String {
+        match self {
+            ChainAddress::ChainAccount(account) => account.owner.to_string(),
+            ChainAddress::IbcPfmAccount(owner, _) => owner.clone(),
+            ChainAddress::ExternalAccount(owner, _) => owner.clone(),
+        }
+    }
+
+    pub fn token(&self) -> String {
+        match self {
+            ChainAddress::ChainAccount(account) => account.token.to_string(),
+            ChainAddress::IbcPfmAccount(_, token) => token.clone().to_string(),
+            ChainAddress::ExternalAccount(_, token) => {
+                token.clone().to_string()
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
-pub struct AccountsMap(pub BTreeMap<NamadaAccount, NamadaDenominatedAmount>);
+pub struct AccountsMap(pub BTreeMap<ChainAddress, NamadaDenominatedAmount>);
 
 impl Serialize for AccountsMap {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        serializer.collect_seq(self.0.iter().map(|(k, v)| {
-            HashMap::from([
-                ("owner", k.owner.encode()),
-                ("token", k.token.encode()),
-                ("amount", v.to_string_precise()),
-            ])
+        serializer.collect_seq(self.0.iter().map(|(k, v)| match k {
+            ChainAddress::ChainAccount(account) => HashMap::from([
+                ("owner", account.owner.encode()),
+                ("token", account.token.encode()),
+                ("type", "onChain".to_string()),
+                ("amount", v.amount().raw_amount().to_string()),
+            ]),
+            ChainAddress::IbcPfmAccount(account, token) => HashMap::from([
+                ("owner", account.clone()),
+                ("token", token.encode()),
+                ("type", "pfm".to_string()),
+                ("amount", v.amount().raw_amount().to_string()),
+            ]),
+            ChainAddress::ExternalAccount(account, token) => HashMap::from([
+                ("owner", account.clone()),
+                ("token", token.encode()),
+                ("type", "external".to_string()),
+                ("amount", v.amount().raw_amount().to_string()),
+            ]),
         }))
     }
 }
@@ -43,23 +86,65 @@ impl<'de> Deserialize<'de> for AccountsMap {
             AccountsMap(
                 v.into_iter()
                     .map(|val| {
-                        let owner =
-                            val.get("owner").expect("Cannot find owner");
-                        let token =
-                            val.get("token").expect("Cannot find token");
-                        let amount =
-                            val.get("amount").expect("Cannot find amount");
+                        let kind = val.get("type").expect("Cannot find type");
 
-                        (
-                            NamadaAccount {
-                                owner: Address::decode(owner)
-                                    .expect("Cannot parse Address for owner"),
-                                token: Address::decode(token)
-                                    .expect("Cannot parse Address for token"),
-                            },
-                            NamadaDenominatedAmount::from_str(amount)
-                                .expect("Cannot parse DenominatedAmount"),
-                        )
+                        if kind.eq("pfm") {
+                            let owner =
+                                val.get("owner").expect("Cannot find owner");
+                            let token =
+                                val.get("token").expect("Cannot find token");
+                            let amount =
+                                val.get("amount").expect("Cannot find amount");
+
+                            (
+                                ChainAddress::IbcPfmAccount(
+                                    owner.clone(),
+                                    Address::decode(token).expect(
+                                        "Cannot parse Address for token",
+                                    ),
+                                ),
+                                NamadaDenominatedAmount::from_str(amount)
+                                    .expect("Cannot parse DenominatedAmount"),
+                            )
+                        } else if kind.eq("onChain") {
+                            let owner =
+                                val.get("owner").expect("Cannot find owner");
+                            let token =
+                                val.get("token").expect("Cannot find token");
+                            let amount =
+                                val.get("amount").expect("Cannot find amount");
+
+                            (
+                                ChainAddress::ChainAccount(NamadaAccount {
+                                    owner: Address::decode(owner).expect(
+                                        "Cannot parse Address for owner",
+                                    ),
+                                    token: Address::decode(token).expect(
+                                        "Cannot parse Address for token",
+                                    ),
+                                }),
+                                NamadaDenominatedAmount::from_str(amount)
+                                    .expect("Cannot parse DenominatedAmount"),
+                            )
+                        } else {
+                            let owner =
+                                val.get("owner").expect("Cannot find owner");
+                            let token =
+                                val.get("token").expect("Cannot find token");
+                            let amount =
+                                val.get("amount").expect("Cannot find amount");
+
+                            (
+                                ChainAddress::ExternalAccount(
+                                    owner.clone(),
+                                    Address::decode(token).expect(
+                                        "Cannot parse Address for token",
+                                    ),
+                                ),
+                                NamadaDenominatedAmount::from_str(amount)
+                                    .expect("Cannot parse DenominatedAmount"),
+                            )
+                        }
                     })
                     .collect(),
             )
@@ -79,8 +164,24 @@ pub struct TransferData {
 
 impl From<NamadaTransfer> for TransferData {
     fn from(transfer: NamadaTransfer) -> Self {
-        let sources = AccountsMap(transfer.sources);
-        let targets = AccountsMap(transfer.targets);
+        let sources = AccountsMap(
+            transfer
+                .sources
+                .iter()
+                .map(|(account, denom)| {
+                    (ChainAddress::ChainAccount(account.clone()), *denom)
+                })
+                .collect(),
+        );
+        let targets = AccountsMap(
+            transfer
+                .targets
+                .iter()
+                .map(|(account, denom)| {
+                    (ChainAddress::ChainAccount(account.clone()), *denom)
+                })
+                .collect(),
+        );
         let shielded_section_hash = transfer.shielded_section_hash;
 
         TransferData {

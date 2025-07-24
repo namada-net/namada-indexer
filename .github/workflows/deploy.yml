@@ -51,6 +51,7 @@ jobs:
     env:
       GIT_LFS_SKIP_SMUDGE: 1
       REGISTRY_URL: ghcr.io
+      REPOSITORY: ${{ github.repository }}
       
     strategy:
       fail-fast: true
@@ -61,10 +62,10 @@ jobs:
             { image: governance, package: governance },
             { image: pos, package: pos },
             { image: rewards, package: rewards },
-            { image: seeder, package: seeder },
             { image: webserver, package: webserver },
             { image: parameters, package: parameters },
             { image: transactions, package: transactions },
+            { image: cometbft, package: cometbft },
           ]
 
     steps:
@@ -88,7 +89,7 @@ jobs:
           file: Dockerfile
           build-args: PACKAGE=${{ matrix.docker.package }}
           push: ${{ startsWith(github.ref, 'refs/tags/v') }}
-          tags: ${{ env.REGISTRY_URL }}/anoma/namada-indexer:${{ matrix.docker.image }}-${{ steps.get_version.outputs.version-without-v }}
+          tags: ${{ env.REGISTRY_URL }}/${{ env.REPOSITORY }}:${{ matrix.docker.image }}-${{ steps.get_version.outputs.version-without-v }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

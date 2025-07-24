@@ -13,25 +13,25 @@ name = "chain"
 path = "src/main.rs"
 
 [dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+deadpool-diesel.workspace = true
+diesel.workspace = true
+futures.workspace = true
+namada_core.workspace = true
+namada_governance.workspace = true
+namada_sdk.workspace = true
+namada_token.workspace = true
+orm.workspace = true
+rlimit.workspace = true
+serde_json.workspace = true
+shared.workspace = true
+subtle-encoding.workspace = true
+tendermint-rpc.workspace = true
 tokio.workspace = true
 tokio-retry.workspace = true
 tracing.workspace = true
-serde_json.workspace = true
-chrono.workspace = true
-clap.workspace = true
-anyhow.workspace = true
-namada_sdk.workspace = true
-namada_core.workspace = true
-namada_governance.workspace = true
-namada_token.workspace = true
-tendermint-rpc.workspace = true
-subtle-encoding.workspace = true
-shared.workspace = true
-deadpool-diesel.workspace = true
-diesel.workspace = true
-orm.workspace = true
-futures.workspace = true
-rlimit.workspace = true
 
 [build-dependencies]
 vergen = { workspace = true, features = ["build", "git", "gitcl"] }

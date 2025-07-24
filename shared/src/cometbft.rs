@@ -6,4 +6,5 @@ pub struct CometbftBlock {
     pub block_height: u32,
     pub block: TendermintBlockResponse,
     pub events: TendermintBlockResultResponse,
+    pub epoch: u32,
 }

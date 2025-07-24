@@ -1,84 +1,105 @@
 [workspace]
 resolver = "2"
 
-members = ["chain", "shared", "rewards", "orm", "pos", "governance", "webserver", "seeder", "parameters", "transactions", "test_helpers", "cometbft"]
+members = [
+  "chain",
+  "shared",
+  "rewards",
+  "orm",
+  "pos",
+  "governance",
+  "webserver",
+  "parameters",
+  "transactions",
+  "cometbft",
+  "test_helpers",
+  "utilities"
+]
 
 [workspace.package]
 authors = ["Heliax <hello@heliax.dev>"]
 edition = "2024"
 license = "GPL-3.0"
 readme = "README.md"
-version = "2.4.4"
+version = "3.3.4"
 
 [workspace.dependencies]
+anyhow = "1.0.75"
+async-stream = "0.3.5"
 axum = { version = "0.7.2", features = ["tower-log", "http2"] }
+axum-extra = { version = "0.9.3", features = ["query"] }
+axum-macros = "0.4.1"
+axum-prometheus = "0.7.0"
+bigdecimal = "0.4.5"
+bimap = { version = "0.6.3", features = ["serde"] }
+chrono = { version = "0.4.30", features = ["serde"] }
+clap = { version = "4.4.2", features = ["derive", "env"] }
+clap-verbosity-flag = "2.1.1"
+deadpool-diesel = { version = "0.5.0", features = ["postgres"] }
+deadpool-redis = "0.13.0"
+diesel = { version = "2.2.0", features = [
+  "postgres",
+  "serde_json",
+  "numeric",
+  "chrono",
+] }
+diesel-derive-enum = { version = "2.1.0", features = ["postgres"] }
+diesel_migrations = { version = "2.2.0", default-features = false, features = [
+  "postgres",
+] }
+futures = "0.3.30"
+futures-core = "0.3.30"
+futures-util = "0.3.30"
+lazy_static = "1.4.0"
+namada_core = { version = "0.149.1" }
+namada_events = { version = "0.149.1" }
+namada_governance = { version = "0.149.1" }
+namada_ibc = { version = "0.149.1" }
+namada_parameters = { version = "0.149.1" }
+namada_proof_of_stake = { version = "0.149.1" }
+namada_sdk = { version = "0.149.1", default-features = false, features = [
+  "std",
+  "async-send",
+  "download-params",
+] }
+namada_token = { version = "0.149.1" }
+namada_tx = { version = "0.149.1" }
+num-bigint = "0.4.6"
+orm = { path = "orm" }
+rand = "0.8.5"
+rlimit = "0.10.2"
+serde = { version = "1.0.138", features = ["derive"] }
+serde_json = "1.0"
+sha256 = "1.5.0"
+shared = { path = "shared" }
+smooth-operator = "0.7.2"
+strum = "0.26.3"
+strum_macros = "0.26.3"
+subtle-encoding = "0.5.1"
+tendermint = "0.40.1"
+tendermint-rpc = { version = "0.40.1", features = ["http-client"] }
+test_helpers = { path = "test_helpers" }
+thiserror = "1.0.56"
 tokio = { version = "1.0", features = ["full"] }
+tokio-retry = "0.3"
+tokio-stream = "0.1.15"
 tower = { version = "0.4.13", features = [
-    "util",
-    "timeout",
-    "load-shed",
-    "limit",
-    "buffer",
+  "util",
+  "timeout",
+  "load-shed",
+  "limit",
+  "buffer",
 ] }
 tower-http = { version = "0.5.0", features = [
-    "compression-full",
-    "limit",
-    "trace",
-    "cors",
+  "compression-full",
+  "limit",
+  "trace",
+  "cors",
 ] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-serde = { version = "1.0.138", features = ["derive"] }
-serde_json = "1.0"
-clap = { version = "4.4.2", features = ["derive", "env"] }
-axum-macros = "0.4.1"
-axum-extra = { version = "0.9.3", features = ["query"] }
-chrono = { version = "0.4.30", features = ["serde"] }
-anyhow = "1.0.75"
-num-bigint = "0.4.6"
-namada_core = "0.47.2"
-namada_sdk = { version = "0.47.2", default-features = false, features = ["std", "async-send", "download-params"] }
-namada_tx = "0.47.2"
-namada_governance = "0.47.2"
-namada_ibc = "0.47.2"
-namada_token = "0.47.2"
-namada_parameters = "0.47.2"
-namada_proof_of_stake = "0.47.2"
-tendermint = "0.40.1"
-tendermint-rpc = { version = "0.40.1", features = ["http-client"] }
-subtle-encoding = "0.5.1"
-bimap = { version = "0.6.3", features = ["serde"] }
-async-stream = "0.3.5"
-futures-core = "0.3.30"
-futures-util = "0.3.30"
-futures = "0.3.30"
-smooth-operator = "0.7.2"
-tokio-stream = "0.1.15"
-tokio-retry = "0.3"
-thiserror = "1.0.56"
-diesel_migrations = { version = "2.2.0", default-features = false, features = [
-    "postgres",
-] }
-deadpool-diesel = { version = "0.5.0", features = ["postgres"] }
-diesel = { version = "2.2.0", features = [
-    "postgres",
-    "serde_json",
-    "numeric",
-    "chrono",
-] }
-diesel-derive-enum = { version = "2.1.0", features = ["postgres"] }
-orm = { path = "orm" }
-test_helpers = { path = "test_helpers" }
-shared = { path = "shared" }
-lazy_static = "1.4.0"
 validator = { version = "0.16.0", features = ["derive"] }
-clap-verbosity-flag = "2.1.1"
-fake = { version = "2.10.0", features = ["derive"] }
-rand = "0.8.5"
-bigdecimal = "0.4.5"
-strum = "0.26.3"
-sha256 = "1.5.0"
-rlimit = "0.10.2"
-axum-prometheus = "0.7.0"
-deadpool-redis = "0.13.0"
 vergen = "8.0.0"
+bech32 = "0.11.0"
+reqwest = { version = "0.11.27", features = ["json", "cookies"] }
+itertools = "0.14.0"

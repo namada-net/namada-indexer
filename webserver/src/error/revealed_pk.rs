@@ -6,6 +6,8 @@ use crate::response::api::ApiErrorResponse;
 
 #[derive(Error, Debug)]
 pub enum RevealedPkError {
+    #[error("{0} is not a valid address")]
+    InvalidAddress(String),
     #[error("Revealed public key {0} not found")]
     NotFound(u64),
     #[error("Database error: {0}")]
@@ -19,6 +21,7 @@ pub enum RevealedPkError {
 impl IntoResponse for RevealedPkError {
     fn into_response(self) -> Response {
         let status_code = match self {
+            RevealedPkError::InvalidAddress(_) => StatusCode::BAD_REQUEST,
             RevealedPkError::NotFound(_) => StatusCode::NOT_FOUND,
             RevealedPkError::Unknown(_)
             | RevealedPkError::Database(_)

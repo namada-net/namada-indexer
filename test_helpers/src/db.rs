@@ -4,7 +4,7 @@ use std::{env, thread};
 
 use deadpool_diesel::postgres::Pool;
 use diesel::{Connection, PgConnection, RunQueryDsl, sql_query};
-use orm::migrations::run_migrations;
+use orm::migrations::CustomMigrationSource;
 use shared::error::{AsDbError, ContextDbInteractError};
 
 static TEST_DB_COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -61,9 +61,10 @@ impl TestDb {
     ) -> anyhow::Result<()> {
         let conn = &mut self.pool.get().await?;
 
-        run_migrations(conn)
+        CustomMigrationSource::new("test_chain_id".to_string())
+            .run_migrations(conn)
             .await
-            .expect("Failed to run migrations");
+            .expect("Should be able to run migrations");
 
         conn.interact(move |conn| {
             conn.build_transaction().read_write().run(test)

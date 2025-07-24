@@ -311,10 +311,11 @@ impl PosService {
     pub async fn get_rewards_by_address(
         &self,
         address: String,
+        epoch: Option<u64>,
     ) -> Result<Vec<Reward>, PoSError> {
         let rewards = self
             .pos_repo
-            .find_rewards_by_address(address)
+            .find_rewards_by_address(address, epoch)
             .await
             .map(|rewards| {
                 rewards.into_iter().map(|(db_reward, db_validator)| {
@@ -323,6 +324,51 @@ impl PosService {
             })
             .map_err(PoSError::Database)?
             .collect::<Vec<_>>();
+
+        Ok(rewards)
+    }
+
+    pub async fn get_rewards_by_delegator_and_validator_and_epoch(
+        &self,
+        delegator: String,
+        validator_address: String,
+        epoch: u64,
+    ) -> Result<Vec<Reward>, PoSError> {
+        // 1) Lookup validator by its address
+        let db_validator = self
+            .pos_repo
+            .find_validator_by_address(validator_address.clone())
+            .await
+            .map_err(PoSError::Database)?;
+
+        // If no validator is found for the given address, handle it as an error
+        // or return empty results
+        let db_validator = match db_validator {
+            Some(val) => val,
+            None => {
+                tracing::debug!(%validator_address, "No validator found for the given address");
+                return Ok(vec![]); // or return Err(...) if you'd rather hard-fail
+            }
+        };
+
+        let validator_id = db_validator.id;
+
+        // 2) Now fetch the rewards by delegator, validator_id, and epoch
+        let db_rewards = self
+            .pos_repo
+            .find_rewards_by_delegator_and_validator_and_epoch(
+                delegator,
+                validator_id,
+                epoch,
+            )
+            .await
+            .map_err(PoSError::Database)?;
+
+        // 3) Transform each DB reward record into your domain `Reward` type
+        let mut rewards = vec![];
+        for db_reward in db_rewards {
+            rewards.push(Reward::from(db_reward.clone(), db_validator.clone()));
+        }
 
         Ok(rewards)
     }

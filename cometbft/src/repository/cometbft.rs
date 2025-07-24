@@ -7,18 +7,17 @@ use orm::crawler_state::{BlockStateInsertDb, CrawlerNameDb};
 use orm::schema::{cometbft_block, crawler_state};
 use shared::crawler_state::{BlockCrawlerState, CrawlerName};
 
-pub fn upsert_block(
+pub fn upsert_blocks(
     transaction_conn: &mut PgConnection,
-    block_height: u32,
-    encoded_block: String,
-    encoded_block_result: String,
+    blocks: Vec<shared::cometbft::CometbftBlock>,
 ) -> anyhow::Result<()> {
     diesel::insert_into(cometbft_block::table)
-        .values::<&CometbftBlock>(&CometbftBlock {
-            id: block_height as i32,
-            encoded_block,
-            encoded_block_result,
-        })
+        .values::<Vec<CometbftBlock>>(
+            blocks
+                .into_iter()
+                .map(CometbftBlock::from)
+                .collect::<Vec<_>>(),
+        )
         .on_conflict(cometbft_block::id)
         .do_nothing()
         .execute(transaction_conn)

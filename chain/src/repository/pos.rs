@@ -248,10 +248,8 @@ pub fn delete_claimed_rewards(
         return Ok(());
     }
 
-    let mut query = diesel::delete(pos_rewards::table).into_boxed();
-
     for (owner, validator_id) in reward_claimers {
-        query = query.or_filter(
+        let target = pos_rewards::table.filter(
             pos_rewards::owner.eq(owner.to_string()).and(
                 pos_rewards::validator_id.eq_any(
                     validators::table.select(validators::columns::id).filter(
@@ -261,11 +259,12 @@ pub fn delete_claimed_rewards(
                 ),
             ),
         );
-    }
 
-    query
-        .execute(transaction_conn)
-        .context("Failed to remove pos rewards from db")?;
+        diesel::update(target)
+            .set(pos_rewards::claimed.eq(true))
+            .execute(transaction_conn)
+            .context("Failed to update pos rewards in db")?;
+    }
 
     anyhow::Ok(())
 }

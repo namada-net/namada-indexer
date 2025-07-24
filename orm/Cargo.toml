@@ -13,13 +13,13 @@ name = "orm"
 path = "src/lib.rs"
 
 [dependencies]
-deadpool-diesel.workspace = true
-diesel-derive-enum.workspace = true
-diesel.workspace = true
-diesel_migrations.workspace = true
-serde.workspace = true
-shared.workspace = true
 bigdecimal.workspace = true
 chrono.workspace = true
+deadpool-diesel.workspace = true
+diesel.workspace = true
+diesel-derive-enum.workspace = true
+diesel_migrations.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+shared.workspace = true
 tendermint-rpc.workspace = true

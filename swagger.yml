@@ -1,11 +1,11 @@
 openapi: "3.0.2"
 info:
   title: Namada Interface Indexer REST Api
-  version: "2.4.4"
+  version: "3.1.0"
   description: "Set of API to interact with a namada indexer."
   contact:
     email: hello@heliax.dev
-    url: https://github.com/anoma/namada-indexer
+    url: https://github.com/namada-net/namada-indexer
 servers:
   - url: http://localhost:5001
   - url: https://indexer.namada.tududes.com
@@ -159,6 +159,37 @@ paths:
             type: string
           required: true
           description: The delegator address
+      responses:
+        "200":
+          description: A list of rewards.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Reward"
+  /api/v1/pos/reward/{delegator_address}/{validator_address}/{epoch}:
+    get:
+      summary: Get rewards for a single delegator for a specific epoch
+      parameters:
+        - in: path
+          name: delegator_address
+          schema:
+            type: string
+          required: true
+          description: The delegator address
+        - in: path
+          name: validator_address
+          schema:
+            type: string
+          required: true
+          description: The validator address
+        - in: path
+          name: epoch
+          schema:
+            type: number
+          required: true
+          description: The epoch
       responses:
         "200":
           description: A list of rewards.
@@ -364,7 +395,15 @@ paths:
           name: status
           schema:
             type: string
-            enum: [pending, votingPeriod, passed, rejected, executedPassed, executedRejected]
+            enum:
+              [
+                pending,
+                votingPeriod,
+                passed,
+                rejected,
+                executedPassed,
+                executedRejected,
+              ]
           description: The status of the proposal
         - in: query
           name: kind
@@ -441,7 +480,7 @@ paths:
           required: true
           description: Proposal id
       responses:
-        '200':
+        "200":
           description: A Governance proposal data.
   /api/v1/gov/proposal/{id}/votes:
     get:
@@ -740,6 +779,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TokenSupply"
+  /api/v1/chain/circulating-supply:
+    get:
+      summary: Get the circulating supply of the native token at the given epoch
+      description: Calculates circulating supply by subtracting locked amounts from multiple excluded addresses from the effective supply
+      parameters:
+        - in: query
+          name: epoch
+          schema:
+            type: integer
+            minimum: 0
+          description: Epoch to query
+      responses:
+        "200":
+          description: Circulating supply of the native token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CirculatingSupply"
   /api/v1/chain/parameters:
     get:
       summary: Get chain parameters
@@ -770,9 +827,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [height]
+                required: [block]
                 properties:
-                  height:
+                 block:
                     type: string
   /api/v1/chain/epoch/latest:
     get:
@@ -786,7 +843,7 @@ paths:
                 type: object
                 required: [epoch]
                 properties:
-                  height:
+                  epoch:
                     type: string
   /api/v1/chain/wrapper/{tx_id}:
     get:
@@ -870,6 +927,23 @@ paths:
             type: number
           required: true
           description: Block timestamp
+      responses:
+        "200":
+          description: Block info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Block"
+  /api/v1/block/hash/{value}:
+    get:
+      summary: Get the block by block hash or block apphash
+      parameters:
+        - in: path
+          name: value
+          schema:
+            type: string
+          required: true
+          description: Block hash or block apphash
       responses:
         "200":
           description: Block info
@@ -1050,7 +1124,15 @@ components:
           type: string
         status:
           type: string
-          enum: [pending, voting, passed, rejected, executedPassed, executedRejected]
+          enum:
+            [
+              pending,
+              voting,
+              passed,
+              rejected,
+              executedPassed,
+              executedRejected,
+            ]
         yayVotes:
           type: number
           format: float
@@ -1126,7 +1208,7 @@ components:
         minDenomAmount:
           type: string
         redelegationInfo:
-          $ref: '#/components/schemas/RedelegationInfo'
+          $ref: "#/components/schemas/RedelegationInfo"
     Unbond:
       type: object
       required:
@@ -1244,11 +1326,7 @@ components:
           type: string
     TokenSupply:
       type: object
-      required:
-        [
-          address,
-          totalSupply,
-        ]
+      required: [address, totalSupply]
       properties:
         address:
           type: string
@@ -1443,6 +1521,8 @@ components:
           items:
             type: string
         parentHash:
+          type: string
+        parentAppHash:
           type: string
         epoch:
           type: string

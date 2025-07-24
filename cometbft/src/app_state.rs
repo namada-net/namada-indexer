@@ -11,9 +11,9 @@ pub struct AppState {
 impl AppState {
     pub fn new(db_url: String) -> anyhow::Result<Self> {
         let max_pool_size = env::var("DATABASE_POOL_SIZE")
-            .unwrap_or_else(|_| 1.to_string())
+            .unwrap_or_else(|_| 8.to_string())
             .parse::<usize>()
-            .unwrap_or(1_usize);
+            .unwrap_or(8_usize);
         let pool_manager = deadpool_diesel::Manager::new(
             db_url,
             deadpool_diesel::Runtime::Tokio1,

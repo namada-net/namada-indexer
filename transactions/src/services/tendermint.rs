@@ -1,7 +1,17 @@
 use anyhow::Context;
 use tendermint_rpc::endpoint::block::Response as TendermintBlockResponse;
 use tendermint_rpc::endpoint::block_results::Response as TendermintBlockResultResponse;
+use tendermint_rpc::endpoint::status::Response as TenderminStatusResponse;
 use tendermint_rpc::{Client, HttpClient};
+
+pub async fn query_status(
+    client: &HttpClient,
+) -> anyhow::Result<TenderminStatusResponse> {
+    client
+        .status()
+        .await
+        .context("Failed to query CometBFT's status")
+}
 
 // TODO: map return to our type
 pub async fn query_raw_block_at_height(

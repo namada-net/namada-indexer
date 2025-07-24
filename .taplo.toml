@@ -1,0 +1,16 @@
+include = ["**/Cargo.toml"]
+exclude = ["target/*"]
+
+
+[[rule]]
+keys = [
+    "build-dependencies",
+    "dependencies",
+    "dev-dependencies",
+    "workspace.dependencies",
+]
+formatting = { reorder_keys = true }
+
+[[rule]]
+keys = ["package"]
+formatting = { reorder_keys = false }

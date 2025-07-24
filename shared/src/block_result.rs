@@ -1,13 +1,17 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
 use bigdecimal::BigDecimal;
+use namada_core::masp::MaspTxId;
 use namada_core::token::Amount as NamadaAmount;
+use namada_events::extend::ReadFromEventAttributes;
+use namada_ibc::IbcTxDataHash;
 use namada_ibc::apps::transfer::types::packet::PacketData as Ics20PacketData;
-use namada_sdk::events::extend::{IndexedMaspData, MaspTxRefs};
+use namada_tx::IndexedTx;
 use namada_tx::data::TxResult;
+use namada_tx::event::MaspTxRef;
 use tendermint_rpc::endpoint::block_results::Response as TendermintBlockResultResponse;
 
 use crate::balance::Amount;
@@ -27,6 +31,8 @@ pub enum EventKind {
     Applied,
     IbcCore(IbcCorePacketKind),
     FungibleTokenPacket,
+    MaspFeePayment,
+    MaspTransfer,
     Unknown,
 }
 
@@ -37,6 +43,8 @@ impl From<&String> for EventKind {
             "send_packet" => Self::IbcCore(IbcCorePacketKind::Send),
             "recv_packet" => Self::IbcCore(IbcCorePacketKind::Recv),
             "fungible_token_packet" => Self::FungibleTokenPacket,
+            "masp/fee-payment" => Self::MaspFeePayment,
+            "masp/transfer" => Self::MaspTransfer,
             _ => Self::Unknown,
         }
     }
@@ -80,7 +88,7 @@ pub struct BatchResults {
 impl From<TxResult<String>> for BatchResults {
     fn from(value: TxResult<String>) -> Self {
         Self {
-            batch_results: value.0.iter().fold(
+            batch_results: value.iter().fold(
                 BTreeMap::default(),
                 |mut acc, (tx_hash, result)| {
                     let tx_id = Id::from(*tx_hash);
@@ -93,7 +101,7 @@ impl From<TxResult<String>> for BatchResults {
                     acc
                 },
             ),
-            batch_errors: value.0.iter().fold(
+            batch_errors: value.iter().fold(
                 BTreeMap::default(),
                 |mut acc, (tx_hash, result)| {
                     let tx_id = Id::from(*tx_hash);
@@ -131,7 +139,6 @@ pub struct TxApplied {
     pub height: u64,
     pub batch: BatchResults,
     pub info: String,
-    pub masp_refs: HashMap<u64, MaspTxRefs>,
 }
 
 impl fmt::Debug for TxApplied {
@@ -143,7 +150,6 @@ impl fmt::Debug for TxApplied {
             height,
             batch,
             info,
-            masp_refs,
         } = self;
 
         f.debug_struct("TxApplied")
@@ -153,15 +159,29 @@ impl fmt::Debug for TxApplied {
             .field("height", height)
             .field("batch", batch)
             .field("info", info)
-            .field("masp_refs_len", &masp_refs.len())
             .finish()
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum MaspRef {
-    Native(String),
-    Ibc(String),
+    MaspSection(MaspTxId),
+    IbcData(IbcTxDataHash),
+}
+
+#[derive(Debug, Clone)]
+pub struct MaspTxData {
+    indexed_tx: IndexedTx,
+    data: MaspRef,
+}
+
+impl From<MaspTxRef> for MaspRef {
+    fn from(value: MaspTxRef) -> Self {
+        match value {
+            MaspTxRef::MaspSection(masp_tx_id) => Self::MaspSection(masp_tx_id),
+            MaspTxRef::IbcData(hash) => Self::IbcData(hash),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -196,6 +216,8 @@ pub enum TxAttributesType {
         success: bool,
         packet: FungibleTokenPacket,
     },
+    MaspFeePayment(MaspTxData),
+    MaspTransfer(MaspTxData),
 }
 
 impl TxAttributesType {
@@ -305,22 +327,6 @@ impl TxAttributesType {
                     .map(|height| u64::from_str(height).unwrap())
                     .unwrap()
                     .to_owned(),
-                masp_refs: attributes
-                    .get("masp_data_refs")
-                    .map(|data| {
-                        if let Ok(data) =
-                            serde_json::from_str::<IndexedMaspData>(data)
-                        {
-                            let refs = data.masp_refs.0.to_vec();
-                            HashMap::from_iter([(
-                                data.tx_index.0 as u64,
-                                MaspTxRefs(refs),
-                            )])
-                        } else {
-                            HashMap::default()
-                        }
-                    })
-                    .unwrap_or_default(),
                 batch: attributes
                     .get("batch")
                     .map(|batch_result| {
@@ -331,6 +337,24 @@ impl TxAttributesType {
                     .unwrap_or_default(),
                 info: attributes.get("info").unwrap().to_owned(),
             })),
+            EventKind::MaspFeePayment => {
+                let data = MaspTxRef::read_from_event_attributes(attributes)
+                    .unwrap()
+                    .into();
+                let indexed_tx =
+                    IndexedTx::read_from_event_attributes(attributes).unwrap();
+
+                Some(Self::MaspFeePayment(MaspTxData { indexed_tx, data }))
+            }
+            EventKind::MaspTransfer => {
+                let data = MaspTxRef::read_from_event_attributes(attributes)
+                    .unwrap()
+                    .into();
+                let indexed_tx =
+                    IndexedTx::read_from_event_attributes(attributes).unwrap();
+
+                Some(Self::MaspTransfer(MaspTxData { indexed_tx, data }))
+            }
         }
     }
 
@@ -507,23 +531,33 @@ impl BlockResult {
         exit_status.unwrap_or(TransactionExitStatus::Rejected)
     }
 
-    pub fn masp_refs(&self, wrapper_hash: &Id, index: u64) -> MaspTxRefs {
+    pub fn masp_ref(&self, indexed_tx: &IndexedTx) -> Option<(MaspRef, bool)> {
         self.end_events
             .iter()
-            .filter_map(|event| {
-                if let Some(TxAttributesType::TxApplied(data)) =
-                    &event.attributes
-                {
-                    Some(data.clone())
-                } else {
-                    None
+            .find_map(|event| match event.kind {
+                EventKind::MaspFeePayment => {
+                    event.attributes.as_ref().map(|attr| match attr {
+                        TxAttributesType::MaspFeePayment(data)
+                            if &data.indexed_tx == indexed_tx =>
+                        {
+                            Some((data.data.to_owned(), true))
+                        }
+                        _ => None,
+                    })
                 }
+                EventKind::MaspTransfer => {
+                    event.attributes.as_ref().map(|attr| match attr {
+                        TxAttributesType::MaspTransfer(data)
+                            if &data.indexed_tx == indexed_tx =>
+                        {
+                            Some((data.data.to_owned(), false))
+                        }
+                        _ => None,
+                    })
+                }
+                _ => None,
             })
-            .find(|attributes| attributes.hash.eq(wrapper_hash))
-            .map(|event| {
-                event.masp_refs.get(&index).cloned().unwrap_or_default()
-            })
-            .unwrap_or_default()
+            .flatten()
     }
 }
 

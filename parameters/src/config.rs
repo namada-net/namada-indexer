@@ -8,9 +8,6 @@ pub struct AppConfig {
     #[clap(long, env)]
     pub database_url: String,
 
-    #[clap(long, env, default_value_t = 30)]
-    pub sleep_for: u64,
-
     #[clap(flatten)]
     pub log: LogConfig,
 }

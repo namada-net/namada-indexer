@@ -8,12 +8,15 @@ use clap::Parser;
 use deadpool_diesel::postgres::Object;
 use governance::config::AppConfig;
 use governance::repository;
-use governance::services::namada as namada_service;
+use governance::services::{
+    namada as namada_service, tendermint as tendermint_service,
+};
 use governance::state::AppState;
 use namada_governance::storage::proposal::{AddRemove, PGFAction, PGFTarget};
 use namada_sdk::time::DateTimeUtc;
-use orm::migrations::run_migrations;
+use orm::migrations::CustomMigrationSource;
 use shared::balance::Amount as NamadaAmount;
+use shared::client::Client;
 use shared::crawler;
 use shared::crawler_state::{CrawlerName, IntervalCrawlerState};
 use shared::error::{AsDbError, AsRpcError, ContextDbInteractError, MainError};
@@ -21,7 +24,6 @@ use shared::id::Id;
 use shared::pgf::{PaymentKind, PaymentRecurrence, PgfAction, PgfPayment};
 use shared::proposal::GovernanceProposalResult;
 use tendermint_rpc::HttpClient;
-use tendermint_rpc::client::CompatMode;
 use tokio::sync::{Mutex, MutexGuard};
 use tokio::time::Instant;
 
@@ -33,12 +35,16 @@ async fn main() -> Result<(), MainError> {
 
     tracing::info!("version: {}", env!("VERGEN_GIT_SHA").to_string());
 
-    let client = Arc::new(
-        HttpClient::builder(config.tendermint_url.as_str().parse().unwrap())
-            .compat_mode(CompatMode::V0_37)
-            .build()
-            .unwrap(),
-    );
+    let client = Client::new(&config.tendermint_url);
+
+    let chain_id = tendermint_service::query_status(client.as_ref())
+        .await
+        .into_rpc_error()?
+        .node_info
+        .network
+        .to_string();
+
+    tracing::info!("Network chain id: {}", chain_id);
 
     let app_state = AppState::new(config.database_url).into_db_error()?;
 
@@ -53,16 +59,16 @@ async fn main() -> Result<(), MainError> {
     ));
 
     // Run migrations
-    run_migrations(&conn)
+    CustomMigrationSource::new(chain_id)
+        .run_migrations(&conn)
         .await
-        .context_db_interact_error()
-        .into_db_error()?;
+        .expect("Should be able to run migrations");
 
     crawler::crawl(
         move |_| {
             crawling_fn(
                 conn.clone(),
-                client.clone(),
+                Arc::new(client.get()),
                 instant.clone(),
                 config.sleep_for,
             )

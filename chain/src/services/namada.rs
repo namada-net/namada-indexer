@@ -22,6 +22,7 @@ use namada_sdk::token::Amount as NamadaSdkAmount;
 use namada_sdk::{rpc, token};
 use shared::balance::{Amount, Balance, Balances, TokenSupply};
 use shared::block::{BlockHeight, Epoch};
+use shared::checksums::Checksums;
 use shared::id::Id;
 use shared::pos::{
     Bond, BondAddresses, Bonds, Redelegation, Unbond, UnbondAddresses, Unbonds,
@@ -38,6 +39,20 @@ use super::utils::{
     default_retry, query_storage_bytes, query_storage_prefix,
     query_storage_value,
 };
+
+pub async fn get_last_block(
+    client: &HttpClient,
+) -> anyhow::Result<BlockHeight> {
+    let last_block = RPC
+        .shell()
+        .last_block(client)
+        .await
+        .context("Failed to query Namada's last committed block")?;
+
+    last_block
+        .ok_or(anyhow::anyhow!("No last block found"))
+        .map(|b| BlockHeight::from(b.height.0 as u32))
+}
 
 pub async fn get_native_token(client: &HttpClient) -> anyhow::Result<Id> {
     let operation = || async {
@@ -204,7 +219,7 @@ async fn query_ibc_tokens(
 
                 let token = IbcToken {
                     address: Id::from(ibc_token_addr),
-                    trace: Id::IbcTrace(ibc_trace.clone()),
+                    trace: Some(Id::IbcTrace(ibc_trace.clone())),
                 };
 
                 tokens.insert(token);
@@ -245,12 +260,9 @@ async fn add_balance(
         &NamadaSdkAddress::from(token_addr),
     );
 
-    let balances = query_storage_prefix::<token::Amount>(
-        client,
-        &balance_prefix,
-        Some(height),
-    )
-    .await?;
+    let balances =
+        query_storage_prefix::<token::Amount>(client, &balance_prefix, None)
+            .await?;
 
     if let Some(balances) = balances {
         for (key, balance) in balances {
@@ -1057,6 +1069,22 @@ pub async fn query_all_redelegations(
         .collect::<anyhow::Result<Vec<Vec<Redelegation>>>>()?;
 
     Ok(nested_delegations.into_iter().flatten().collect())
+}
+
+pub async fn query_checksums(client: &HttpClient) -> Checksums {
+    let mut checksums = Checksums::default();
+    for code_path in Checksums::code_paths() {
+        let code =
+            query_tx_code_hash(client, &code_path)
+                .await
+                .unwrap_or_else(|| {
+                    panic!("{} must be defined in namada storage.", code_path)
+                });
+
+        checksums.add(code_path, code.to_lowercase());
+    }
+
+    checksums
 }
 
 pub async fn get_validator_addresses_at_epoch(

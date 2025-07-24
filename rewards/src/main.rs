@@ -6,16 +6,18 @@ use chrono::NaiveDateTime;
 use clap::Parser;
 use deadpool_diesel::postgres::Object;
 use namada_sdk::time::{DateTimeUtc, Utc};
-use orm::migrations::run_migrations;
+use orm::migrations::CustomMigrationSource;
 use rewards::config::AppConfig;
 use rewards::repository;
-use rewards::services::namada as namada_service;
+use rewards::services::{
+    namada as namada_service, tendermint as tendermint_service,
+};
 use rewards::state::AppState;
+use shared::client::Client;
 use shared::crawler;
 use shared::crawler_state::{CrawlerName, IntervalCrawlerState};
 use shared::error::{AsDbError, AsRpcError, ContextDbInteractError, MainError};
 use tendermint_rpc::HttpClient;
-use tendermint_rpc::client::CompatMode;
 use tokio::time::sleep;
 
 #[tokio::main]
@@ -26,42 +28,51 @@ async fn main() -> Result<(), MainError> {
 
     tracing::info!("version: {}", env!("VERGEN_GIT_SHA").to_string());
 
-    let client = Arc::new(
-        HttpClient::builder(config.tendermint_url.as_str().parse().unwrap())
-            .compat_mode(CompatMode::V0_37)
-            .build()
-            .unwrap(),
-    );
+    let client = Client::new(&config.tendermint_url);
+
+    let chain_id = tendermint_service::query_status(client.as_ref())
+        .await
+        .into_rpc_error()?
+        .node_info
+        .network
+        .to_string();
+
+    tracing::info!("Network chain id: {}", chain_id);
 
     let app_state = AppState::new(config.database_url).into_db_error()?;
 
     let conn = Arc::new(app_state.get_db_connection().await.into_db_error()?);
 
     // Run migrations
-    run_migrations(&conn)
+    CustomMigrationSource::new(chain_id)
+        .run_migrations(&conn)
         .await
-        .context_db_interact_error()
-        .into_db_error()?;
+        .expect("Should be able to run migrations");
 
     tracing::debug!("Querying epoch...");
 
-    let mut epoch;
-    loop {
-        epoch = namada_service::get_current_epoch(&client)
-            .await
-            .into_rpc_error()?;
+    let mut epoch = config.backfill_from;
 
-        if epoch < 2 {
-            tracing::info!("Waiting for first epoch to happen...");
-            sleep(Duration::from_secs(config.sleep_for)).await;
-        } else {
-            break;
+    if epoch.is_none() {
+        loop {
+            epoch = Some(
+                namada_service::get_current_epoch(client.as_ref())
+                    .await
+                    .into_rpc_error()?,
+            );
+
+            if epoch.unwrap_or(0) < 2 {
+                tracing::info!("Waiting for first epoch to happen...");
+                sleep(Duration::from_secs(config.sleep_for)).await;
+            } else {
+                break;
+            }
         }
     }
 
     crawler::crawl(
-        move |epoch| crawling_fn(conn.clone(), client.clone(), epoch),
-        epoch,
+        move |epoch| crawling_fn(conn.clone(), Arc::new(client.get()), epoch),
+        epoch.unwrap_or(0),
         None,
     )
     .await
@@ -86,6 +97,8 @@ async fn crawling_fn(
         return Err(MainError::NoAction);
     }
 
+    tracing::info!("Starting to update proposals...");
+
     // TODO: change this by querying all the pairs in the database
     let delegations_pairs = namada_service::query_delegation_pairs(&client)
         .await
@@ -97,9 +110,14 @@ async fn crawling_fn(
         "Querying rewards..."
     );
 
-    let rewards = namada_service::query_rewards(&client, &delegations_pairs)
-        .await
-        .into_rpc_error()?;
+    let rewards = namada_service::query_rewards(
+        &client,
+        &delegations_pairs,
+        epoch_to_process,
+    )
+    .await
+    .into_rpc_error()?;
+
     let non_zero_rewards = rewards
         .iter()
         .filter(|reward| !reward.amount.is_zero())
@@ -119,10 +137,11 @@ async fn crawling_fn(
 
     conn.interact(move |conn| {
         conn.build_transaction().read_write().run(
-            |transaction_conn: &mut diesel::prelude::PgConnection| {
+            |transaction_conn: &mut diesel::pg::PgConnection| {
                 repository::pos_rewards::upsert_rewards(
                     transaction_conn,
                     non_zero_rewards,
+                    epoch_to_process as i32,
                 )?;
 
                 repository::crawler_state::upsert_crawler_state(
@@ -130,7 +149,7 @@ async fn crawling_fn(
                     (CrawlerName::Rewards, crawler_state).into(),
                 )?;
 
-                anyhow::Ok(())
+                Ok(())
             },
         )
     })

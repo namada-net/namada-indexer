@@ -13,19 +13,19 @@ name = "transactions"
 path = "src/main.rs"
 
 [dependencies]
-bigdecimal.workspace = true
-tokio.workspace = true 
-tracing.workspace = true
-chrono.workspace = true
-clap.workspace = true 
 anyhow.workspace = true
-namada_sdk.workspace = true
-tendermint-rpc.workspace = true
-shared.workspace = true
+bigdecimal.workspace = true
+chrono.workspace = true
+clap.workspace = true
 deadpool-diesel.workspace = true
 diesel.workspace = true
+namada_sdk.workspace = true
 orm.workspace = true
 serde_json.workspace = true
+shared.workspace = true
+tendermint-rpc.workspace = true
+tokio.workspace = true
+tracing.workspace = true
 
 [build-dependencies]
 vergen = { workspace = true, features = ["build", "git", "gitcl"] }

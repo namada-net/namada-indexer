@@ -8,7 +8,8 @@ use chain::config::AppConfig;
 use chain::repository;
 use chain::services::namada::{
     query_all_balances, query_all_bonds_and_unbonds, query_all_proposals,
-    query_bonds, query_last_block_height, query_redelegations, query_tokens,
+    query_bonds, query_checksums, query_last_block_height, query_redelegations,
+    query_tokens,
 };
 use chain::services::{
     db as db_service, namada as namada_service,
@@ -17,15 +18,17 @@ use chain::services::{
 use chrono::{NaiveDateTime, Utc};
 use clap::Parser;
 use deadpool_diesel::postgres::Object;
-use futures::future::FutureExt;
+use diesel::RunQueryDsl;
 use futures::stream::StreamExt;
 use namada_sdk::time::DateTimeUtc;
-use orm::migrations::run_migrations;
+use orm::migrations::CustomMigrationSource;
+use orm::schema::{bonds, unbonds};
 use repository::pgf as namada_pgf_repository;
 use shared::balance::TokenSupply;
 use shared::block::Block;
 use shared::block_result::BlockResult;
 use shared::checksums::Checksums;
+use shared::client::Client;
 use shared::cometbft::CometbftBlock;
 use shared::crawler::crawl;
 use shared::crawler_state::ChainCrawlerState;
@@ -38,8 +41,8 @@ use shared::token::Token;
 use shared::utils::BalanceChange;
 use shared::validator::ValidatorSet;
 use tendermint_rpc::HttpClient;
-use tendermint_rpc::client::CompatMode;
 use tendermint_rpc::endpoint::block::Response as TendermintBlockResponse;
+use tokio::sync::Mutex;
 use tokio::time::Instant;
 use tokio_retry::Retry;
 use tokio_retry::strategy::{ExponentialBackoff, jitter};
@@ -48,46 +51,50 @@ use tokio_retry::strategy::{ExponentialBackoff, jitter};
 async fn main() -> Result<(), MainError> {
     let config = AppConfig::parse();
 
-    let client =
-        HttpClient::builder(config.tendermint_url.as_str().parse().unwrap())
-            .compat_mode(CompatMode::V0_37)
-            .build()
-            .unwrap();
+    let client = Client::new(&config.tendermint_url);
 
-    let mut checksums = Checksums::default();
-    for code_path in Checksums::code_paths() {
-        let code = namada_service::query_tx_code_hash(&client, &code_path)
-            .await
-            .unwrap_or_else(|| {
-                panic!("{} must be defined in namada storage.", code_path)
-            });
-        checksums.add(code_path, code.to_lowercase());
-    }
+    let chain_id = tendermint_service::query_status(client.as_ref())
+        .await
+        .into_rpc_error()?
+        .node_info
+        .network
+        .to_string();
+
+    tracing::info!("Network chain id: {}", chain_id);
+
+    let checksums =
+        Arc::new(Mutex::new(query_checksums(client.as_ref()).await));
 
     config.log.init();
-
-    let client = Arc::new(client);
 
     let app_state = AppState::new(config.database_url).into_db_error()?;
     let conn = Arc::new(app_state.get_db_connection().await.into_db_error()?);
 
     // Run migrations
-    run_migrations(&conn)
+    CustomMigrationSource::new(chain_id)
+        .run_migrations(&conn)
         .await
-        .context_db_interact_error()
-        .into_db_error()?;
+        .expect("Should be able to run migrations");
 
     rlimit::increase_nofile_limit(10240).unwrap();
     rlimit::increase_nofile_limit(u64::MAX).unwrap();
 
+    let last_block_height = namada_service::get_last_block(client.as_ref())
+        .await
+        .into_rpc_error()?;
+    let crawler_state = db_service::try_get_chain_crawler_state(&conn)
+        .await
+        .into_db_error()?;
+
+    let limit = last_block_height - config.storage_read_past_height_limit;
+
+    let can_continue =
+        crawler_state.map(|s| (s.last_processed_block >= limit, s));
+    let can_backfill = config.backfill_from.map(|bf| (bf >= limit, bf));
+
     // See if we can start from existing crawler_state
-    let crawler_state = match (
-        config.backfill_from,
-        db_service::try_get_chain_crawler_state(&conn)
-            .await
-            .into_db_error()?,
-    ) {
-        (Some(height), _) => {
+    let crawler_state = match (can_backfill, can_continue) {
+        (Some((true, height)), _) => {
             tracing::warn!("Backfilling from block height {}", height);
             Some(ChainCrawlerState {
                 last_processed_block: height,
@@ -96,8 +103,8 @@ async fn main() -> Result<(), MainError> {
                 timestamp: 0,
             })
         }
-        (None, Some(crawler_state)) => {
-            tracing::debug!(
+        (None, Some((true, crawler_state))) => {
+            tracing::info!(
                 "Found chain crawler state, attempting initial crawl at block \
                  {}...",
                 crawler_state.last_processed_block
@@ -106,7 +113,7 @@ async fn main() -> Result<(), MainError> {
             // Try to run crawler_fn with the last processed block
             let crawl_result = crawling_fn(
                 crawler_state.last_processed_block,
-                client.clone(),
+                Arc::new(client.get()),
                 conn.clone(),
                 checksums.clone(),
                 true,
@@ -129,7 +136,7 @@ async fn main() -> Result<(), MainError> {
                     // If any other type of error occurred, we should not
                     // increment last_processed_block but
                     // crawl from there without initial_query
-                    tracing::debug!(
+                    tracing::info!(
                         "Initial crawl had an error (not RpcError), \
                          continuing from block {}...",
                         crawler_state.last_processed_block
@@ -140,7 +147,7 @@ async fn main() -> Result<(), MainError> {
                     // If the crawl was successful, increment last_processed
                     // block and continue from there.
                     let next_block = crawler_state.last_processed_block + 1;
-                    tracing::debug!(
+                    tracing::info!(
                         "Initial crawl was successful, continuing from block \
                          {}...",
                         next_block
@@ -152,9 +159,12 @@ async fn main() -> Result<(), MainError> {
                 }
             }
         }
-        (None, None) => {
-            tracing::debug!(
-                "No chain crawler state found, starting from initial_query..."
+        _ => {
+            tracing::info!(
+                "Couldn't continue from the last state. Either state does not \
+                 exist or it's more than {} blocks behind. Starting from \
+                 initial_query...",
+                config.storage_read_past_height_limit
             );
             None
         }
@@ -162,12 +172,41 @@ async fn main() -> Result<(), MainError> {
 
     // Handle cases where we need to perform initial query
     let crawler_state = match crawler_state {
-        Some(state) => state,
+        Some(state) => {
+            if config.reindex_bonds {
+                let (bonds, unbonds) =
+                    query_all_bonds_and_unbonds(client.as_ref(), None, None)
+                        .await
+                        .into_rpc_error()?;
+                conn.interact(move |conn| {
+                    diesel::delete(bonds::table).execute(conn)?;
+                    diesel::delete(unbonds::table).execute(conn)?;
+                    conn.build_transaction().read_write().run(
+                        |transaction_conn| {
+                            repository::pos::insert_bonds(
+                                transaction_conn,
+                                bonds,
+                            )?;
+                            repository::pos::insert_unbonds(
+                                transaction_conn,
+                                unbonds,
+                            )
+                        },
+                    )
+                })
+                .await
+                .context_db_interact_error()
+                .and_then(identity)
+                .into_db_error()?;
+            }
+            state
+        }
         None => {
+            let checksums = checksums.lock().await;
             initial_query(
-                &client,
+                client.as_ref(),
                 &conn,
-                checksums.clone(),
+                &checksums,
                 config.initial_query_retry_time,
                 config.initial_query_retry_attempts,
             )
@@ -183,7 +222,7 @@ async fn main() -> Result<(), MainError> {
         move |block_height| {
             crawling_fn(
                 block_height,
-                client.clone(),
+                Arc::new(client.get()),
                 conn.clone(),
                 checksums.clone(),
                 config.backfill_from.is_none(),
@@ -199,7 +238,7 @@ async fn crawling_fn(
     block_height: u32,
     client: Arc<HttpClient>,
     conn: Arc<Object>,
-    checksums: Checksums,
+    checksums: Arc<Mutex<Checksums>>,
     should_update_crawler_state: bool,
 ) -> Result<(), MainError> {
     let should_process = can_process(block_height, client.clone()).await?;
@@ -229,17 +268,30 @@ async fn crawling_fn(
             .await
             .into_rpc_error()?;
 
+    let mut checksums = checksums.lock().await;
+    // If we check like this we do not have to store last epoch in memory
+    let new_epoch = first_block_in_epoch.eq(&block_height);
+    // For new epochs, we need to query checksums in case they were changed due
+    // to proposal
+    if new_epoch {
+        *checksums = namada_service::query_checksums(&client).await;
+    }
+
     let native_token = namada_service::get_native_token(&client)
         .await
         .into_rpc_error()?;
     let native_token_address: namada_sdk::address::Address =
         native_token.clone().into();
 
+    let cometbft_block =
+        get_cometbft_block_with_fallback(&conn, &client, block_height)
+            .await
+            .into_db_error()?;
     let (block, tm_block_response, epoch) =
-        get_block(cometbft_block, &client, checksums, &native_token_address)
+        get_block(cometbft_block, &client, &checksums, &native_token_address)
             .await?;
 
-    let rate_limits = first_block_in_epoch.eq(&block_height).then(|| {
+    let rate_limits = new_epoch.then(|| {
         let client = Arc::clone(&client);
 
         // start this series of queries in parallel, which take
@@ -255,7 +307,7 @@ async fn crawling_fn(
         })
     });
 
-    tracing::debug!(
+    tracing::info!(
         block = block_height,
         txs = block.transactions.len(),
         "Deserialized {} txs...",
@@ -273,13 +325,14 @@ async fn crawling_fn(
             native_token.clone(),
         ));
     let addresses = block.addresses_with_balance_change(&native_token);
+    let all_changed_tokens_supply = addresses
+        .iter()
+        .map(|bc| bc.token.clone())
+        .collect::<HashSet<_>>();
 
-    let token_supplies = first_block_in_epoch
-        .eq(&block_height)
-        .then(|| query_token_supplies(&client, &conn, &native_token, epoch))
-        .future()
-        .await
-        .transpose()?;
+    let token_supplies =
+        query_token_supplies(&client, &all_changed_tokens_supply, epoch)
+            .await?;
 
     let validators_addresses = if first_block_in_epoch.eq(&block_height) {
         let previous_epoch = epoch.saturating_sub(1);
@@ -445,7 +498,7 @@ async fn crawling_fn(
 
     let first_checkpoint = Instant::now();
 
-    tracing::debug!(
+    tracing::info!(
         txs = block.transactions.len(),
         ibc_tokens = ibc_tokens.len(),
         balance_changes = balances.len(),
@@ -476,7 +529,7 @@ async fn crawling_fn(
 
                 repository::balance::insert_token_supplies(
                     transaction_conn,
-                    token_supplies.into_iter().flatten(),
+                    token_supplies,
                 )?;
 
                 repository::balance::insert_ibc_rate_limits(
@@ -565,7 +618,7 @@ async fn crawling_fn(
 
     let second_checkpoint = Instant::now();
 
-    tracing::debug!(
+    tracing::info!(
         block = block_height,
         time_taken = second_checkpoint
             .duration_since(first_checkpoint)
@@ -579,7 +632,7 @@ async fn crawling_fn(
 async fn initial_query(
     client: &HttpClient,
     conn: &Object,
-    checksums: Checksums,
+    checksums: &Checksums,
     retry_time: u64,
     retry_attempts: usize,
 ) -> Result<(), MainError> {
@@ -616,8 +669,7 @@ async fn try_initial_query(
             .into_db_error()?;
 
     let (block, tm_block_response, epoch) =
-        get_block(cometbft_block, client, checksums.clone(), &native_token)
-            .await?;
+        get_block(cometbft_block, client, &checksums, &native_token).await?;
 
     let tokens = query_tokens(client).await.into_rpc_error()?;
 
@@ -631,10 +683,12 @@ async fn try_initial_query(
         .into_rpc_error()
     };
     let token_supplies_fut = async {
-        let native_token = namada_service::get_native_token(client)
-            .await
-            .into_rpc_error()?;
-        query_token_supplies(client, conn, &native_token, epoch).await
+        query_token_supplies(
+            client,
+            &tokens.iter().cloned().collect::<HashSet<_>>(),
+            epoch,
+        )
+        .await
     };
 
     let (rate_limits, token_supplies) =
@@ -808,27 +862,16 @@ async fn update_crawler_timestamp(
 async fn get_block(
     block: CometbftBlock,
     client: &HttpClient,
-    checksums: Checksums,
+    checksums: &Checksums,
     native_token: &namada_sdk::address::Address,
 ) -> Result<(Block, TendermintBlockResponse, u32), MainError> {
     let block_height = block.block_height;
 
-    tracing::debug!(block = block_height, "Query block...");
     let tm_block_response = block.block;
-    tracing::debug!(
-        block = block_height,
-        "Raw block contains {} txs...",
-        tm_block_response.block.data.len()
-    );
-
-    tracing::debug!(block = block_height, "Query block results...");
     let tm_block_results_response = block.events;
-    let block_results = BlockResult::from(tm_block_results_response);
+    let epoch = block.epoch;
 
-    tracing::debug!(block = block_height, "Query epoch...");
-    let epoch = namada_service::get_epoch_at_block_height(client, block_height)
-        .await
-        .into_rpc_error()?;
+    let block_results = BlockResult::from(tm_block_results_response);
 
     let proposer_address_namada = namada_service::get_validator_namada_address(
         client,
@@ -857,22 +900,31 @@ async fn get_block(
     Ok((block, tm_block_response, epoch))
 }
 
-async fn query_non_native_supplies(
+async fn query_token_supplies(
     client: &HttpClient,
-    conn: &Object,
+    tokens: &HashSet<Token>,
     epoch: u32,
 ) -> Result<Vec<TokenSupply>, MainError> {
-    let token_addresses = db_service::get_non_native_tokens(conn)
-        .await
-        .into_db_error()?;
+    let mut buffer = Vec::with_capacity(tokens.len());
 
-    let mut buffer = Vec::with_capacity(1);
-
-    let mut stream = futures::stream::iter(token_addresses)
-        .map(|address| async move {
-            namada_service::get_token_supply(client, address, epoch)
+    let mut stream = futures::stream::iter(tokens)
+        .map(|token| async move {
+            match token {
+                Token::Ibc(ibc_token) => namada_service::get_token_supply(
+                    client,
+                    ibc_token.address.to_string(),
+                    epoch,
+                )
                 .await
-                .into_rpc_error()
+                .into_rpc_error(),
+                Token::Native(address) => {
+                    namada_service::get_native_token_supply(
+                        client, address, epoch,
+                    )
+                    .await
+                    .into_rpc_error()
+                }
+            }
         })
         .buffer_unordered(32);
 
@@ -884,24 +936,47 @@ async fn query_non_native_supplies(
     Ok(buffer)
 }
 
-async fn query_token_supplies(
-    client: &HttpClient,
+pub async fn get_cometbft_block_with_fallback(
     conn: &Object,
-    native_token: &Id,
-    epoch: u32,
-) -> Result<Vec<TokenSupply>, MainError> {
-    let native_fut =
-        namada_service::get_native_token_supply(client, native_token, epoch)
-            .map(|result| result.into_rpc_error());
+    client: &HttpClient,
+    block_height: u32,
+) -> anyhow::Result<CometbftBlock> {
+    let block = repository::cometbft::get_block(conn, block_height)
+        .await
+        .context("Failed to get block")?;
 
-    let non_native_fut = query_non_native_supplies(client, conn, epoch);
+    let block = match block {
+        Some(block) => block,
+        None => {
+            let block = tendermint_service::query_raw_block_at_height(
+                client,
+                block_height,
+            )
+            .await
+            .context("Failed to query block")?;
 
-    let (native, non_native) = futures::try_join!(native_fut, non_native_fut)?;
+            let events = tendermint_service::query_raw_block_results_at_height(
+                client,
+                block_height,
+            )
+            .await
+            .context("Failed to query block results")?;
 
-    let mut supplies = non_native;
-    supplies.push(native);
+            let epoch =
+                namada_service::get_epoch_at_block_height(client, block_height)
+                    .await
+                    .context("Failed to query epoch")?;
 
-    Ok(supplies)
+            CometbftBlock {
+                block_height,
+                block,
+                events,
+                epoch,
+            }
+        }
+    };
+
+    Ok(block)
 }
 
 pub async fn get_cometbft_block_with_fallback(

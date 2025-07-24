@@ -68,6 +68,18 @@ services:
       args:
         PACKAGE: chain
 
+  cometbft:
+    <<: *defaults
+    image: namada/cometbft-indexer
+    profiles:
+      - services
+    environment:
+      <<: *env-vars
+    build:
+      <<: *build
+      args:
+        PACKAGE: cometbft
+
   governance:
     <<: *defaults
     image: namada/governance-indexer

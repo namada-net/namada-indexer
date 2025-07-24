@@ -25,6 +25,23 @@ pub struct AppConfig {
     )]
     pub backfill_from: Option<u32>,
 
+    #[clap(
+        long,
+        env,
+        default_value = "3600",
+        help = "Crawl from given height and do not update crawler_state"
+    )]
+    pub storage_read_past_height_limit: u32,
+
     #[clap(flatten)]
     pub log: LogConfig,
+
+    #[clap(
+        short,
+        long,
+        env,
+        help = "Clear (un)bonds from DB and re-query them.",
+        default_value = "false"
+    )]
+    pub reindex_bonds: bool,
 }

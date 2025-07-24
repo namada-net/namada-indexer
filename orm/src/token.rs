@@ -51,7 +51,7 @@ impl IbcTokenDb {
         match token {
             Token::Ibc(token) => Some(IbcTokenDb {
                 address: token.address.to_string(),
-                ibc_trace: token.trace.to_string(),
+                ibc_trace: token.clone().trace.unwrap_or_default().to_string(),
             }),
             Token::Native(_) => None,
         }

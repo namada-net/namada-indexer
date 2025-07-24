@@ -135,7 +135,7 @@ impl GovernanceRepoTrait for GovernanceRepo {
 
         conn.interact(move |conn| {
             governance_votes::table
-                .filter(governance_votes::dsl::id.eq(proposal_id))
+                .filter(governance_votes::dsl::proposal_id.eq(proposal_id))
                 .select(GovernanceProposalVoteDb::as_select())
                 .paginate(page)
                 .load_and_count_pages(conn)
@@ -154,7 +154,7 @@ impl GovernanceRepoTrait for GovernanceRepo {
 
         conn.interact(move |conn| {
             governance_votes::table
-                .filter(governance_votes::dsl::id.eq(proposal_id).and(
+                .filter(governance_votes::dsl::proposal_id.eq(proposal_id).and(
                     governance_votes::dsl::voter_address.eq(voter_address),
                 ))
                 .select(GovernanceProposalVoteDb::as_select())

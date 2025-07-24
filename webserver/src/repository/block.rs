@@ -23,6 +23,11 @@ pub trait BlockRepositoryTrait {
         &self,
         timestamp: i64,
     ) -> Result<Option<BlockDb>, String>;
+
+    async fn find_block_by_hash(
+        &self,
+        hash: String,
+    ) -> Result<Option<BlockDb>, String>;
 }
 
 #[async_trait]
@@ -61,6 +66,25 @@ impl BlockRepositoryTrait for BlockRepository {
         conn.interact(move |conn| {
             blocks::table
                 .filter(blocks::timestamp.le(timestamp))
+                .order(blocks::timestamp.desc())
+                .select(BlockDb::as_select())
+                .first(conn)
+                .ok()
+        })
+        .await
+        .map_err(|e| e.to_string())
+    }
+
+    async fn find_block_by_hash(
+        &self,
+        hash: String,
+    ) -> Result<Option<BlockDb>, String> {
+        let conn = self.app_state.get_db_connection().await;
+
+        conn.interact(move |conn| {
+            blocks::table
+                .filter(blocks::hash.eq(&hash))
+                .or_filter(blocks::app_hash.eq(&hash))
                 .order(blocks::timestamp.desc())
                 .select(BlockDb::as_select())
                 .first(conn)

@@ -6,17 +6,19 @@ use clap::Parser;
 use deadpool_diesel::postgres::Object;
 use namada_sdk::time::DateTimeUtc;
 use orm::crawler_state::EpochStateInsertDb;
-use orm::migrations::run_migrations;
+use orm::migrations::CustomMigrationSource;
 use orm::validators::ValidatorInsertDb;
 use pos::app_state::AppState;
 use pos::config::AppConfig;
 use pos::repository::{self};
-use pos::services::namada as namada_service;
+use pos::services::{
+    namada as namada_service, tendermint as tendermint_service,
+};
+use shared::client::Client;
 use shared::crawler;
 use shared::crawler_state::{CrawlerName, EpochCrawlerState};
 use shared::error::{AsDbError, AsRpcError, ContextDbInteractError, MainError};
 use tendermint_rpc::HttpClient;
-use tendermint_rpc::client::CompatMode;
 
 #[tokio::main]
 async fn main() -> Result<(), MainError> {
@@ -24,29 +26,33 @@ async fn main() -> Result<(), MainError> {
 
     config.log.init();
 
-    let client = Arc::new(
-        HttpClient::builder(config.tendermint_url.as_str().parse().unwrap())
-            .compat_mode(CompatMode::V0_37)
-            .build()
-            .unwrap(),
-    );
+    let client = Client::new(&config.tendermint_url);
+
+    let chain_id = tendermint_service::query_status(client.as_ref())
+        .await
+        .into_rpc_error()?
+        .node_info
+        .network
+        .to_string();
+
+    tracing::info!("Network chain id: {}", chain_id);
 
     let app_state = AppState::new(config.database_url).into_db_error()?;
     let conn = Arc::new(app_state.get_db_connection().await.into_db_error()?);
 
     // Run migrations
-    run_migrations(&conn)
+    CustomMigrationSource::new(chain_id)
+        .run_migrations(&conn)
         .await
-        .context_db_interact_error()
-        .into_db_error()?;
+        .expect("Should be able to run migrations");
 
     // We always start from the current epoch
-    let next_epoch = namada_service::get_current_epoch(&client.clone())
+    let next_epoch = namada_service::get_current_epoch(client.as_ref())
         .await
         .into_rpc_error()?;
 
     crawler::crawl(
-        move |epoch| crawling_fn(epoch, conn.clone(), client.clone()),
+        move |epoch| crawling_fn(epoch, conn.clone(), Arc::new(client.get())),
         next_epoch,
         None,
     )

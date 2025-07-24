@@ -6,6 +6,8 @@ use orm::transactions::{
 use shared::id::Id;
 use shared::token::{IbcToken, Token};
 
+use crate::response::transaction::ShortInnerTransactionResponse;
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum TransactionKind {
     TransparentTransfer,
@@ -79,6 +81,7 @@ pub struct WrapperTransaction {
     pub gas_limit: u64,
     pub gas_used: Option<u64>,
     pub amount_per_gas_unit: Option<f64>,
+    pub masp_fee_payment: Option<ShortInnerTransaction>,
     pub block_height: u64,
     pub exit_code: TransactionExitStatus,
     pub atomic: bool,
@@ -103,6 +106,7 @@ impl WrapperTransaction {
     pub fn from_db(
         transaction: WrapperTransactionDb,
         tokens: Vec<(TokenDb, Option<IbcTokenDb>)>,
+        masp_fee_payment: Option<InnerTransaction>,
     ) -> Self {
         let fee_token = tokens
             .into_iter()
@@ -133,6 +137,7 @@ impl WrapperTransaction {
             amount_per_gas_unit: transaction
                 .amount_per_gas_unit
                 .map(|g| g.parse::<f64>().expect("Should be a number")),
+            masp_fee_payment,
             block_height: transaction.block_height as u64,
             exit_code: TransactionExitStatus::from(transaction.exit_code),
             atomic: transaction.atomic,

@@ -6,6 +6,7 @@ use crate::utils::DelegationPair;
 pub struct Reward {
     pub delegation_pair: DelegationPair,
     pub amount: Amount,
+    pub epoch: i32,
 }
 
 impl Reward {
@@ -19,6 +20,7 @@ impl Reward {
                 delegator_address: Id::Account(delegator_address.to_string()),
             },
             amount: Amount::fake(),
+            epoch: 0,
         }
     }
 }

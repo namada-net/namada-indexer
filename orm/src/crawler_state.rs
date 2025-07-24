@@ -305,3 +305,32 @@ impl From<(CrawlerName, IntervalCrawlerState)> for IntervalStateInsertDb {
         }
     }
 }
+
+#[derive(Serialize, Clone, Debug)]
+pub struct CometbftCrawlerStateDb {
+    pub last_processed_block: i32,
+    pub timestamp: chrono::NaiveDateTime,
+}
+impl
+    Queryable<
+        (
+            Nullable<diesel::sql_types::Integer>,
+            diesel::sql_types::Timestamp,
+        ),
+        Pg,
+    > for CometbftCrawlerStateDb
+{
+    type Row = (Option<i32>, chrono::NaiveDateTime);
+
+    fn build(row: Self::Row) -> diesel::deserialize::Result<Self> {
+        match row {
+            (Some(last_processed_block), timestamp) => Ok(Self {
+                last_processed_block,
+                timestamp,
+            }),
+            _ => Err("last_processed_block missing in the block crawler \
+                      status"
+                .into()),
+        }
+    }
+}

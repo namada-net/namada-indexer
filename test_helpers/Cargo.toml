@@ -13,8 +13,8 @@ name = "test_helpers"
 path = "src/lib.rs"
 
 [dependencies]
-orm.workspace = true
 anyhow.workspace = true
 deadpool-diesel.workspace = true
 diesel.workspace = true
+orm.workspace = true
 shared.workspace = true

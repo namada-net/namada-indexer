@@ -96,7 +96,7 @@ impl From<SharedToken> for TokenResponse {
             }),
             SharedToken::Ibc(token) => TokenResponse::Ibc(IbcToken {
                 address: token.address.to_string(),
-                trace: token.trace.to_string(),
+                trace: token.trace.unwrap_or_default().to_string(),
             }),
         }
     }
@@ -118,4 +118,10 @@ impl From<TokenSupply> for TokenSupplyResponse {
             effective_supply: value.effective_supply,
         }
     }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CirculatingSupply {
+    pub circulating_supply: String,
 }

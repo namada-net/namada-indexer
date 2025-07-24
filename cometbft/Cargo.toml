@@ -1,6 +1,6 @@
 [package]
 name = "cometbft"
-description = "Cometbft transactions fetcher."
+description = "Namada cometbft crawler."
 resolver = "2"
 authors.workspace = true
 edition.workspace = true
@@ -9,27 +9,33 @@ readme.workspace = true
 version.workspace = true
 
 [[bin]]
-name = "transactions"
+name = "cometbft"
 path = "src/main.rs"
 
 [dependencies]
-bigdecimal.workspace = true
-tokio.workspace = true 
-tracing.workspace = true
-chrono.workspace = true
-clap.workspace = true 
 anyhow.workspace = true
-namada_sdk.workspace = true
-namada_core.workspace = true
-tendermint-rpc.workspace = true
-shared.workspace = true
-futures.workspace = true
+chrono.workspace = true
+clap.workspace = true
 deadpool-diesel.workspace = true
 diesel.workspace = true
-diesel_migrations.workspace = true
+futures.workspace = true
+namada_core.workspace = true
+namada_governance.workspace = true
+namada_sdk.workspace = true
+namada_token.workspace = true
 orm.workspace = true
-clap-verbosity-flag.workspace = true
+rlimit.workspace = true
 serde_json.workspace = true
+shared.workspace = true
+subtle-encoding.workspace = true
+tendermint-rpc.workspace = true
+tokio.workspace = true
+tokio-retry.workspace = true
+tracing.workspace = true
+itertools.workspace = true
 
 [build-dependencies]
 vergen = { workspace = true, features = ["build", "git", "gitcl"] }
+
+[dev-dependencies]
+test_helpers.workspace = true

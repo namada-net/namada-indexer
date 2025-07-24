@@ -120,6 +120,7 @@ jobs:
     env:
       GIT_LFS_SKIP_SMUDGE: 1
       REGISTRY_URL: ghcr.io
+      REPOSITORY: ${{ github.repository }}
 
     strategy:
       fail-fast: true
@@ -130,10 +131,10 @@ jobs:
             { image: governance, package: governance },
             { image: pos, package: pos },
             { image: rewards, package: rewards },
-            { image: seeder, package: seeder },
             { image: webserver, package: webserver },
             { image: parameters, package: parameters },
             { image: transactions, package: transactions },
+            { image: cometbft, package: cometbft },
           ]
 
     steps:
@@ -145,7 +146,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY_URL }}/anoma/namada-indexer
+          images: ${{ env.REGISTRY_URL }}/${{ env.REPOSITORY }}
           flavor: |
             latest=auto
             prefix=${{ matrix.docker.image }}
@@ -166,7 +167,7 @@ jobs:
           context: .
           file: Dockerfile
           build-args: PACKAGE=${{ matrix.docker.package }}
-          push: ${{ github.event.pull_request.head.repo.full_name == 'anoma/namada-indexer' || github.event_name == 'push'  }}
+          push: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha

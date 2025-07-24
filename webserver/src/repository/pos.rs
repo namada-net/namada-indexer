@@ -49,6 +49,11 @@ pub trait PosRepositoryTrait {
         id: i32,
     ) -> Result<Option<ValidatorDb>, String>;
 
+    async fn find_validator_by_address(
+        &self,
+        address: String,
+    ) -> Result<Option<ValidatorDb>, String>;
+
     async fn find_merged_bonds_by_address(
         &self,
         address: String,
@@ -180,6 +185,23 @@ impl PosRepositoryTrait for PosRepository {
         conn.interact(move |conn| {
             validators::table
                 .filter(validators::dsl::id.eq(validator_id))
+                .select(ValidatorDb::as_select())
+                .first(conn)
+                .ok()
+        })
+        .await
+        .map_err(|e| e.to_string())
+    }
+
+    async fn find_validator_by_address(
+        &self,
+        address: String,
+    ) -> Result<Option<ValidatorDb>, String> {
+        let conn = self.app_state.get_db_connection().await;
+
+        conn.interact(move |conn| {
+            validators::table
+                .filter(validators::dsl::namada_address.eq(address))
                 .select(ValidatorDb::as_select())
                 .first(conn)
                 .ok()

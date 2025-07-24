@@ -190,6 +190,7 @@ diesel::table! {
         id -> Int4,
         encoded_block -> Varchar,
         encoded_block_result -> Varchar,
+        epoch -> Int4,
     }
 }
 
@@ -367,6 +368,8 @@ diesel::table! {
         owner -> Varchar,
         validator_id -> Int4,
         raw_amount -> Numeric,
+        claimed -> Bool,
+        epoch -> Int4,
     }
 }
 
@@ -482,6 +485,7 @@ diesel::table! {
         atomic -> Bool,
         gas_used -> Nullable<Int4>,
         amount_per_gas_unit -> Nullable<Varchar>,
+        masp_fee_payment -> Nullable<Varchar>,
     }
 }
 

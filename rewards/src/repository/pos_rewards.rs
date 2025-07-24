@@ -11,6 +11,7 @@ use super::utils::MAX_PARAM_SIZE;
 pub fn upsert_rewards(
     transaction_conn: &mut PgConnection,
     rewards: Vec<Reward>,
+    epoch: i32,
 ) -> anyhow::Result<()> {
     let rewards_col_count = pos_rewards::all_columns.len() as i64;
 
@@ -19,7 +20,7 @@ pub fn upsert_rewards(
         .collect::<Vec<_>>()
         .chunks((MAX_PARAM_SIZE as i64 / rewards_col_count) as usize)
     {
-        upsert_rewards_chunk(transaction_conn, chunk.to_vec())?;
+        upsert_rewards_chunk(transaction_conn, chunk.to_vec(), epoch)?;
     }
 
     anyhow::Ok(())
@@ -28,6 +29,7 @@ pub fn upsert_rewards(
 fn upsert_rewards_chunk(
     transaction_conn: &mut PgConnection,
     rewards: Vec<Reward>,
+    epoch: i32,
 ) -> anyhow::Result<()> {
     diesel::insert_into(pos_rewards::table)
         .values::<Vec<PosRewardInsertDb>>(
@@ -45,13 +47,14 @@ fn upsert_rewards_chunk(
                         .first(transaction_conn)
                         .expect("Failed to get validator");
 
-                    PosRewardInsertDb::from_reward(reward, validator_id)
+                    PosRewardInsertDb::from_reward(reward, validator_id, epoch)
                 })
                 .collect::<Vec<_>>(),
         )
         .on_conflict((
             pos_rewards::columns::owner,
             pos_rewards::columns::validator_id,
+            pos_rewards::columns::epoch, // Add epoch to conflict target
         ))
         .do_update()
         .set(

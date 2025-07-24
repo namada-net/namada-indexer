@@ -7,10 +7,11 @@ use bigdecimal::{BigDecimal, Zero};
 use chrono::{NaiveDateTime, Utc};
 use clap::Parser;
 use deadpool_diesel::postgres::Object;
-use orm::migrations::run_migrations;
+use orm::migrations::CustomMigrationSource;
 use shared::block::Block;
 use shared::block_result::BlockResult;
 use shared::checksums::Checksums;
+use shared::client::Client;
 use shared::cometbft::CometbftBlock;
 use shared::crawler::crawl;
 use shared::crawler_state::BlockCrawlerState;
@@ -18,7 +19,7 @@ use shared::error::{AsDbError, AsRpcError, ContextDbInteractError, MainError};
 use shared::id::Id;
 use shared::transaction::{IbcTokenAction, IbcTokenFlow};
 use tendermint_rpc::HttpClient;
-use tendermint_rpc::client::CompatMode;
+use tokio::sync::Mutex;
 use tokio::time::Instant;
 use transactions::app_state::AppState;
 use transactions::config::AppConfig;
@@ -26,6 +27,7 @@ use transactions::repository::{
     block as block_repo, cometbft as cometbft_repo, masp as masp_repo,
     transactions as transaction_repo,
 };
+use transactions::services::namada::query_checksums;
 use transactions::services::{
     db as db_service, namada as namada_service,
     tendermint as tendermint_service, tx as tx_service,
@@ -37,31 +39,28 @@ async fn main() -> Result<(), MainError> {
 
     config.log.init();
 
-    let client = Arc::new(
-        HttpClient::builder(config.tendermint_url.as_str().parse().unwrap())
-            .compat_mode(CompatMode::V0_37)
-            .build()
-            .unwrap(),
-    );
+    let client = Client::new(&config.tendermint_url);
 
-    let mut checksums = Checksums::default();
-    for code_path in Checksums::code_paths() {
-        let code = namada_service::query_tx_code_hash(&client, &code_path)
-            .await
-            .unwrap_or_else(|| {
-                panic!("{} must be defined in namada storage.", code_path)
-            });
-        checksums.add(code_path, code.to_lowercase());
-    }
+    let chain_id = tendermint_service::query_status(client.as_ref())
+        .await
+        .into_rpc_error()?
+        .node_info
+        .network
+        .to_string();
+
+    tracing::info!("Network chain id: {}", chain_id);
+
+    let checksums =
+        Arc::new(Mutex::new(query_checksums(client.as_ref()).await));
 
     let app_state = AppState::new(config.database_url).into_db_error()?;
     let conn = Arc::new(app_state.get_db_connection().await.into_db_error()?);
 
     // Run migrations
-    run_migrations(&conn)
+    CustomMigrationSource::new(chain_id)
+        .run_migrations(&conn)
         .await
-        .context_db_interact_error()
-        .into_db_error()?;
+        .expect("Should be able to run migrations");
 
     let crawler_state = db_service::get_crawler_state(&conn).await;
 
@@ -78,13 +77,20 @@ async fn main() -> Result<(), MainError> {
         ),
     };
 
+    let native_token: namada_sdk::address::Address =
+        namada_service::get_native_token(client.as_ref())
+            .await
+            .into_rpc_error()?
+            .into();
+
     crawl(
         move |block_height| {
             crawling_fn(
                 block_height,
-                client.clone(),
+                Arc::new(client.get()),
                 conn.clone(),
                 checksums.clone(),
+                native_token.clone(),
                 config.backfill_from.is_none(),
             )
         },
@@ -98,7 +104,8 @@ async fn crawling_fn(
     block_height: u32,
     client: Arc<HttpClient>,
     conn: Arc<Object>,
-    checksums: Checksums,
+    checksums: Arc<Mutex<Checksums>>,
+    native_token: namada_sdk::address::Address,
     should_update_crawler_state: bool,
 ) -> Result<(), MainError> {
     let should_process = can_process(block_height, client.clone()).await?;
@@ -122,7 +129,6 @@ async fn crawling_fn(
             .await
             .into_db_error()?;
 
-    tracing::debug!(block = block_height, "Query block...");
     let tm_block_response = cometbft_block.block;
     tracing::debug!(
         block = block_height,
@@ -130,7 +136,6 @@ async fn crawling_fn(
         tm_block_response.block.data.len()
     );
 
-    tracing::debug!(block = block_height, "Query block results...");
     let tm_block_results_response = cometbft_block.events;
     let block_results = BlockResult::from(tm_block_results_response);
 
@@ -148,23 +153,26 @@ async fn crawling_fn(
         "Got block proposer address"
     );
 
-    let native_token: namada_sdk::address::Address =
-        namada_service::get_native_token(&client)
-            .await
-            .into_rpc_error()?
-            .into();
-
-    let epoch =
-        namada_service::get_epoch_at_block_height(&client, block_height)
+    let first_block_in_epoch =
+        namada_service::get_first_block_in_epoch(&client)
             .await
             .into_rpc_error()?;
+
+    let mut checksums = checksums.lock().await;
+    // If we check like this we do not have to store last epoch in memory
+    let new_epoch = first_block_in_epoch.eq(&block_height);
+    // For new epochs, we need to query checksums in case they were changed due
+    // to proposal
+    if new_epoch {
+        *checksums = namada_service::query_checksums(&client).await;
+    }
 
     let block = Block::from(
         &tm_block_response,
         &block_results,
         &proposer_address_namada,
-        checksums,
-        epoch,
+        &checksums,
+        cometbft_block.epoch,
         block_height,
         &native_token,
     );
@@ -175,24 +183,16 @@ async fn crawling_fn(
     let masp_entries = block.masp_entries();
     let gas_estimates = tx_service::get_gas_estimates(&block.transactions);
 
-    println!("{:?}", block.transactions);
-    println!("{:?}", gas_estimates);
-
     let ibc_sequence_packet =
         tx_service::get_ibc_packets(&block_results, &block.transactions);
     let ibc_ack_packet = tx_service::get_ibc_ack_packet(&inner_txs);
 
     let ibc_token_flows = {
-        let epoch =
-            namada_service::get_epoch_at_block_height(&client, block_height)
-                .await
-                .into_rpc_error()?;
-
         let mut flows_map = HashMap::new();
 
         tx_service::get_ibc_token_flows(&block_results).for_each(
             |(action, token, amount)| {
-                let key = (token.clone(), epoch);
+                let key = (token.clone(), cometbft_block.epoch);
                 let entry = flows_map
                     .entry(key)
                     .or_insert((BigDecimal::zero(), BigDecimal::zero()));
@@ -376,10 +376,16 @@ pub async fn get_cometbft_block_with_fallback(
             .await
             .context("Failed to query block results")?;
 
+            let epoch =
+                namada_service::get_epoch_at_block_height(client, block_height)
+                    .await
+                    .context("Failed to query epoch")?;
+
             CometbftBlock {
                 block_height,
                 block,
                 events,
+                epoch,
             }
         }
     };

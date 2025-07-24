@@ -41,6 +41,7 @@ pub async fn query_delegation_pairs(
 pub async fn query_rewards(
     client: &HttpClient,
     delegation_pairs: &HashSet<DelegationPair>,
+    epoch: Epoch,
 ) -> anyhow::Result<Vec<Reward>> {
     let mut all_rewards: Vec<Reward> = Vec::new();
 
@@ -60,7 +61,7 @@ pub async fn query_rewards(
     );
 
     let results = futures::stream::iter(batches)
-        .map(|batch| process_batch_with_retries(client, batch))
+        .map(|batch| process_batch_with_retries(client, batch, epoch))
         .buffer_unordered(3)
         .collect::<Vec<_>>()
         .await;
@@ -88,12 +89,13 @@ pub async fn get_current_epoch(client: &HttpClient) -> anyhow::Result<Epoch> {
 async fn process_batch_with_retries(
     client: &HttpClient,
     batch: (usize, Vec<DelegationPair>),
+    epoch: Epoch,
 ) -> anyhow::Result<Vec<Reward>> {
     let mut retries = 0;
 
     tracing::info!("Processing batch {}", batch.0);
     loop {
-        let result = process_batch(client, batch.1.clone()).await;
+        let result = process_batch(client, batch.1.clone(), epoch).await;
 
         match result {
             Ok(rewards) => {
@@ -124,6 +126,7 @@ async fn process_batch_with_retries(
 async fn process_batch(
     client: &HttpClient,
     batch: Vec<DelegationPair>,
+    epoch: Epoch,
 ) -> anyhow::Result<Vec<Reward>> {
     Ok(futures::stream::iter(batch)
         .filter_map(|delegation| async move {
@@ -140,7 +143,7 @@ async fn process_batch(
                     client,
                     &delegation.validator_address.clone().into(),
                     &Some(delegation.delegator_address.clone().into()),
-                    &None,
+                    &Some((epoch as u64).into()),
                 )
                 .await
                 .ok()?;
@@ -154,6 +157,7 @@ async fn process_batch(
             Some(Reward {
                 delegation_pair: delegation.clone(),
                 amount: Amount::from(reward),
+                epoch: epoch as i32,
             })
         })
         .map(futures::future::ready)

@@ -10,7 +10,9 @@ use axum_extra::extract::Query;
 use futures::Stream;
 use tokio_stream::StreamExt;
 
-use crate::dto::chain::TokenSupply as TokenSupplyDto;
+use crate::dto::chain::{
+    CirculatingSupply as CirculatingSupplyDto, TokenSupply as TokenSupplyDto,
+};
 use crate::error::api::ApiError;
 use crate::response::chain::{
     LastProcessedBlockResponse, LastProcessedEpochResponse, ParametersResponse,
@@ -119,4 +121,15 @@ pub async fn get_token_supply(
     let response = supply.map(TokenSupplyResponse::from);
 
     Ok(Json(response))
+}
+
+pub async fn get_circulating_supply(
+    Query(query): Query<CirculatingSupplyDto>,
+    State(state): State<CommonState>,
+) -> Result<Json<CirculatingSupplyRsp>, ApiError> {
+    let supply = state
+        .chain_service
+        .get_circulating_supply(query.epoch)
+        .await?;
+    Ok(Json(supply))
 }

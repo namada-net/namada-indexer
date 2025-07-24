@@ -2,17 +2,17 @@
 
 ##  About 
 
-This repository, **Namada Indexer**, is distinct from and incomparable to the similarly named [Namada MASP Indexer](https://github.com/anoma/namada-masp-indexer).
+This repository, **Namada Indexer**, is distinct from and incomparable to the similarly named [Namada MASP Indexer](https://github.com/namada-net/namada-masp-indexer).
 
 Note that: `Namada Indexer != Namada MASP Indexer && Namada MASP Indexer != Namada Indexer`.
 
 The **Namada Indexer** is a collection of microservices that crawls data from a Namada Node, stores it in a PostgreSQL database, and makes it accessible via a REST API.
 
-The primary goal of the indexer is to retrieve and store the data necessary for [Namadillo](https://github.com/anoma/namada-interface) (the Namada Interface) to operate. Consequently, the indexer does not store historical data, except for the `Transactions Service`, which indexes all transactions starting from block 1 and is not used by Namadillo.
+The primary goal of the indexer is to retrieve and store the data necessary for [Namadillo](https://github.com/namada-net/namada-interface) (the Namada Interface) to operate. Consequently, the indexer does not store historical data, except for the `Transactions Service`, which indexes all transactions starting from block 1 and is not used by Namadillo.
 
 ## Namadillo Integration
 
-When using this project as a backend for [Namadillo](https://github.com/anoma/namada-interface), always ensure you check out the latest tag. The `main` branch may contain an incompatible set of APIs.
+When using this project as a backend for [Namadillo](https://github.com/namada-net/namada-interface), always ensure you check out the latest tag. The `main` branch may contain an incompatible set of APIs.
 
 ## Contribution
 
@@ -115,7 +115,7 @@ If you prefer not to use Docker, you can follow the instructions below to set up
    - Other services can be run as needed based on your requirements.
 
 ## REST API
-The API endpoints are described in the `swagger.yml` file located in the project root. A hosted HTML version of the API documentation is available at [Namada Interface Indexer REST API](https://anoma.github.io/namada-indexer).
+The API endpoints are described in the `swagger.yml` file located in the project root. A hosted HTML version of the API documentation is available at [Namada Interface Indexer REST API](https://namada-net.github.io/namada-indexer).
 
 ## Populating the Database for Testing
 

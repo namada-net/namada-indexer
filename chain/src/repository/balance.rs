@@ -283,9 +283,9 @@ mod tests {
                 address: Id::Account(
                     "tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn".to_string(),
                 ),
-                trace: Id::Account(
+                trace: Some(Id::Account(
                     "tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn".to_string(),
-                ),
+                )),
             });
 
             let new_amount = Amount::from(NamadaAmount::from_u64(200));

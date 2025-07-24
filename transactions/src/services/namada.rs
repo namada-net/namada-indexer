@@ -5,6 +5,7 @@ use namada_sdk::queries::RPC;
 use namada_sdk::rpc;
 use namada_sdk::state::Key;
 use shared::block::{BlockHeight, Epoch};
+use shared::checksums::Checksums;
 use shared::id::Id;
 use tendermint_rpc::HttpClient;
 
@@ -84,4 +85,30 @@ pub async fn get_validator_namada_address(
         .await?;
 
     Ok(validator.map(Id::from))
+}
+
+pub async fn query_checksums(client: &HttpClient) -> Checksums {
+    let mut checksums = Checksums::default();
+    for code_path in Checksums::code_paths() {
+        let code =
+            query_tx_code_hash(client, &code_path)
+                .await
+                .unwrap_or_else(|| {
+                    panic!("{} must be defined in namada storage.", code_path)
+                });
+
+        checksums.add(code_path, code.to_lowercase());
+    }
+
+    checksums
+}
+
+pub async fn get_first_block_in_epoch(
+    client: &HttpClient,
+) -> anyhow::Result<BlockHeight> {
+    RPC.shell()
+        .first_block_height_of_current_epoch(client)
+        .await
+        .context("Failed to query native token")
+        .map(|height| height.0 as BlockHeight)
 }

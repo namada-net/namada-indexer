@@ -23,7 +23,7 @@ use crate::transaction::{
     InnerTransaction, Transaction, TransactionKind, TransactionTarget,
     WrapperTransaction,
 };
-use crate::utils::{BalanceChange, MASP_ADDRESS};
+use crate::utils::{BalanceChange, MASP_ADDRESS, ibc_ack_to_balance_info};
 use crate::validator::{
     Validator, ValidatorMetadataChange, ValidatorState, ValidatorStateChange,
 };
@@ -112,7 +112,7 @@ impl Block {
         block_response: &TendermintBlockResponse,
         block_results: &BlockResult,
         proposer_address_namada: &Option<Id>,
-        checksums: Checksums,
+        checksums: &Checksums,
         epoch: Epoch,
         block_height: BlockHeight,
         native_token: &Address,
@@ -191,7 +191,7 @@ impl Block {
                             .map(|account| {
                                 TransactionTarget::sent(
                                     tx.tx_id.clone(),
-                                    account.owner.to_string(),
+                                    account.owner(),
                                 )
                             })
                             .collect::<Vec<_>>();
@@ -202,7 +202,7 @@ impl Block {
                             .map(|account| {
                                 TransactionTarget::received(
                                     tx.tx_id.clone(),
-                                    account.owner.to_string(),
+                                    account.owner(),
                                 )
                             })
                             .collect::<Vec<_>>();
@@ -211,8 +211,6 @@ impl Block {
                         vec![]
                     }
                 }
-                // IbcMsg is only used for non-transfer ibc packets
-                TransactionKind::IbcMsg(_) => vec![],
                 TransactionKind::IbcTrasparentTransfer((_, transfer))
                 | TransactionKind::IbcShieldingTransfer((_, transfer))
                 | TransactionKind::IbcUnshieldingTransfer((_, transfer)) => {
@@ -223,7 +221,7 @@ impl Block {
                         .map(|account| {
                             TransactionTarget::sent(
                                 tx.tx_id.clone(),
-                                account.owner.to_string(),
+                                account.owner(),
                             )
                         })
                         .collect::<Vec<_>>();
@@ -234,7 +232,7 @@ impl Block {
                         .map(|account| {
                             TransactionTarget::received(
                                 tx.tx_id.clone(),
-                                account.owner.to_string(),
+                                account.owner(),
                             )
                         })
                         .collect::<Vec<_>>();
@@ -389,7 +387,21 @@ impl Block {
                         vec![]
                     }
                 }
-                TransactionKind::Unknown(_) => vec![],
+                TransactionKind::ChangeConsensusKey(data) => {
+                    if let Some(data) = data {
+                        let change_consensus_key_data = data.clone();
+
+                        vec![TransactionTarget::sent(
+                            tx.tx_id,
+                            change_consensus_key_data.validator.to_string(),
+                        )]
+                    } else {
+                        vec![]
+                    }
+                }
+                TransactionKind::IbcMsg(_)
+                | TransactionKind::InitAccount(_)
+                | TransactionKind::Unknown(_) => vec![],
             })
             .collect::<HashSet<_>>()
     }
@@ -415,7 +427,7 @@ impl Block {
                         .0
                         .iter()
                         .map(|(account, amount)| MaspEntry {
-                            token_address: account.token.to_string(),
+                            token_address: account.token(),
                             timestamp: self.header.timestamp,
                             raw_amount: amount.amount().into(),
                             direction: MaspEntryDirection::In,
@@ -429,7 +441,7 @@ impl Block {
                         .0
                         .iter()
                         .map(|(account, amount)| MaspEntry {
-                            token_address: account.token.to_string(),
+                            token_address: account.token(),
                             timestamp: self.header.timestamp,
                             raw_amount: amount.amount().into(),
                             direction: MaspEntryDirection::Out,
@@ -459,9 +471,9 @@ impl Block {
                             },
                         ))
                         .filter_map(|(transfer, denominated_amount, dir)| {
-                            if transfer.owner == MASP_ADDRESS {
+                            if transfer.owner() == MASP_ADDRESS.to_string() {
                                 Some(MaspEntry {
-                                    token_address: transfer.token.to_string(),
+                                    token_address: transfer.token(),
                                     timestamp: self.header.timestamp,
                                     raw_amount: denominated_amount
                                         .amount()
@@ -481,7 +493,7 @@ impl Block {
                         .0
                         .iter()
                         .map(|(account, amount)| MaspEntry {
-                            token_address: account.token.to_string(),
+                            token_address: account.token(),
                             timestamp: self.header.timestamp,
                             raw_amount: amount.amount().into(),
                             direction: MaspEntryDirection::In,
@@ -495,7 +507,7 @@ impl Block {
                         .0
                         .iter()
                         .map(|(account, amount)| MaspEntry {
-                            token_address: account.token.to_string(),
+                            token_address: account.token(),
                             timestamp: self.header.timestamp,
                             raw_amount: amount.amount().into(),
                             direction: MaspEntryDirection::Out,
@@ -694,28 +706,58 @@ impl Block {
                 let mut balance_changes: Vec<BalanceChange> = inners_txs
                     .iter()
                     .filter_map(|tx| {
-                        self.process_inner_tx_for_balance(tx, native_token)
+                        if tx.was_successful(wrapper_tx) {
+                            self.process_inner_tx_for_balance(tx, native_token)
+                        } else {
+                            None
+                        }
                     })
                     .flatten()
                     .collect();
 
+                // Push the balance change of the gas payer
                 balance_changes.push(BalanceChange::new(
                     wrapper_tx.fee.gas_payer.clone(),
                     Token::Native(wrapper_tx.fee.gas_token.clone()),
                 ));
+                // If the token is not the native one also push the balanche
+                // change of the block proposer (the balance change for the
+                // native token is pushed by default)
+                if &wrapper_tx.fee.gas_token != native_token {
+                    if let Some(block_proposer) =
+                        &self.header.proposer_address_namada
+                    {
+                        balance_changes.push(BalanceChange::new(
+                            Id::Account(block_proposer.to_owned()),
+                            Token::Native(wrapper_tx.fee.gas_token.clone()),
+                        ));
+                    }
+                }
 
                 balance_changes
             })
             .collect()
     }
 
-    pub fn process_inner_tx_for_balance(
+    fn process_inner_tx_for_balance(
         &self,
         tx: &InnerTransaction,
         native_token: &Id,
     ) -> Option<Vec<BalanceChange>> {
         let change = match &tx.kind {
-            TransactionKind::IbcMsg(_) => Default::default(),
+            TransactionKind::IbcMsg(Some(msg)) => {
+                let balance = ibc_ack_to_balance_info(
+                    msg.0.clone(),
+                    native_token.clone(),
+                )
+                // TODO: as this function does not return Result, we just ok()
+                // it for now
+                .ok()??;
+
+                vec![balance]
+            }
+            TransactionKind::IbcMsg(None) => Default::default(),
+
             // Shielded transfers don't move any transparent balance
             TransactionKind::ShieldedTransfer(_) => Default::default(),
             TransactionKind::ShieldingTransfer(data)
@@ -729,8 +771,12 @@ impl Block {
                     .flat_map(|transfer_changes| {
                         transfer_changes.0.keys().map(|account| {
                             BalanceChange::new(
-                                Id::from(account.owner.clone()),
-                                Token::Native(Id::from(account.token.clone())),
+                                Id::Account(account.owner()),
+                                Token::new(
+                                    &account.token(),
+                                    None,
+                                    &native_token.to_string(),
+                                ),
                             )
                         })
                     })
@@ -744,7 +790,7 @@ impl Block {
                     .flat_map(|transfer_changes| {
                         transfer_changes.0.keys().map(|account| {
                             BalanceChange::new(
-                                Id::from(account.owner.clone()),
+                                Id::Account(account.owner()),
                                 token.to_owned(),
                             )
                         })
@@ -802,6 +848,8 @@ impl Block {
                 )]
             }
             TransactionKind::Redelegation(_)
+            | TransactionKind::ChangeConsensusKey(_)
+            | TransactionKind::InitAccount(_)
             | TransactionKind::CommissionChange(_)
             | TransactionKind::RevealPk(_)
             | TransactionKind::DeactivateValidator(_)

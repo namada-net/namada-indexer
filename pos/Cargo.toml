@@ -13,19 +13,19 @@ name = "pos"
 path = "src/main.rs"
 
 [dependencies]
-tokio.workspace = true 
-tracing.workspace = true
-chrono.workspace = true 
-clap.workspace = true 
 anyhow.workspace = true
-namada_sdk.workspace = true
-namada_core.workspace = true
-tendermint-rpc.workspace = true
-shared.workspace = true
-futures.workspace = true
+chrono.workspace = true
+clap.workspace = true
 deadpool-diesel.workspace = true
 diesel.workspace = true
+futures.workspace = true
+namada_core.workspace = true
+namada_sdk.workspace = true
 orm.workspace = true
+shared.workspace = true
+tendermint-rpc.workspace = true
+tokio.workspace = true
+tracing.workspace = true
 
 [build-dependencies]
 vergen = { workspace = true, features = ["build", "git", "gitcl"] }
