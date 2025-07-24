@@ -4,8 +4,8 @@ use orm::schema::crawler_state;
 
 use crate::appstate::AppState;
 use crate::dto::crawler_state::CrawlerNameDto;
+use crate::entity::crawler::CrawlersTimestamps;
 use crate::error::crawler_state::CrawlerStateError;
-use crate::response::crawler_state::CrawlersTimestamps;
 
 #[derive(Clone)]
 pub struct CrawlerStateService {
@@ -49,7 +49,9 @@ impl CrawlerStateService {
                 .map(|crawler| CrawlersTimestamps {
                     name: crawler.name.to_string(),
                     timestamp: crawler.timestamp.and_utc().timestamp(),
-                    last_processed_block_height: crawler.last_processed_block,
+                    last_processed_block_height: crawler
+                        .last_processed_block
+                        .map(|h| h as u64),
                 })
                 .collect::<Vec<CrawlersTimestamps>>()
         })

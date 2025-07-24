@@ -13,8 +13,8 @@ use tokio_stream::StreamExt;
 use crate::dto::chain::TokenSupply as TokenSupplyDto;
 use crate::error::api::ApiError;
 use crate::response::chain::{
-    LastProcessedBlock, LastProcessedEpoch, Parameters, RpcUrl, Token,
-    TokenSupply as TokenSupplyRsp,
+    LastProcessedBlockResponse, LastProcessedEpochResponse, ParametersResponse,
+    RpcUrlResponse, TokenResponse, TokenSupplyResponse,
 };
 use crate::state::common::CommonState;
 
@@ -60,45 +60,49 @@ pub async fn chain_status(
 pub async fn get_parameters(
     _headers: HeaderMap,
     State(state): State<CommonState>,
-) -> Result<Json<Parameters>, ApiError> {
+) -> Result<Json<ParametersResponse>, ApiError> {
     let parameters = state.chain_service.find_latest_parameters().await?;
 
-    Ok(Json(parameters))
+    let response = ParametersResponse::from(parameters);
+
+    Ok(Json(response))
 }
 
-pub async fn get_rpc_url(State(state): State<CommonState>) -> Json<RpcUrl> {
-    Json(RpcUrl {
+pub async fn get_rpc_url(
+    State(state): State<CommonState>,
+) -> Json<RpcUrlResponse> {
+    Json(RpcUrlResponse {
         url: state.config.tendermint_url,
     })
 }
 
 pub async fn get_tokens(
     State(state): State<CommonState>,
-) -> Result<Json<Vec<Token>>, ApiError> {
+) -> Result<Json<Vec<TokenResponse>>, ApiError> {
     let tokens = state.chain_service.find_tokens().await?;
-    let res = tokens.into_iter().map(Token::from).collect();
+    let res = tokens.into_iter().map(TokenResponse::from).collect();
 
     Ok(Json(res))
 }
 
 pub async fn get_last_processed_block(
     State(state): State<CommonState>,
-) -> Result<Json<LastProcessedBlock>, ApiError> {
+) -> Result<Json<LastProcessedBlockResponse>, ApiError> {
     let last_processed_block =
         state.chain_service.find_last_processed_block().await?;
 
-    Ok(Json(LastProcessedBlock {
+    Ok(Json(LastProcessedBlockResponse {
         block: last_processed_block.to_string(),
     }))
 }
 
 pub async fn get_last_processed_epoch(
     State(state): State<CommonState>,
-) -> Result<Json<LastProcessedEpoch>, ApiError> {
+) -> Result<Json<LastProcessedEpochResponse>, ApiError> {
     let last_processed_block =
         state.chain_service.find_last_processed_epoch().await?;
 
-    Ok(Json(LastProcessedEpoch {
+    Ok(Json(LastProcessedEpochResponse {
         epoch: last_processed_block.to_string(),
     }))
 }
@@ -106,10 +110,13 @@ pub async fn get_last_processed_epoch(
 pub async fn get_token_supply(
     Query(query): Query<TokenSupplyDto>,
     State(state): State<CommonState>,
-) -> Result<Json<Option<TokenSupplyRsp>>, ApiError> {
+) -> Result<Json<Option<TokenSupplyResponse>>, ApiError> {
     let supply = state
         .chain_service
         .get_token_supply(query.address, query.epoch)
         .await?;
-    Ok(Json(supply))
+
+    let response = supply.map(TokenSupplyResponse::from);
+
+    Ok(Json(response))
 }

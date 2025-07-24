@@ -1,8 +1,8 @@
 use axum::async_trait;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, SelectableHelper};
 use orm::balances::BalanceDb;
-use orm::schema::token;
-use orm::token::TokenDb;
+use orm::schema::{ibc_token, token};
+use orm::token::{IbcTokenDb, TokenDb};
 use orm::views::balances;
 
 use crate::appstate::AppState;
@@ -16,7 +16,9 @@ pub struct BalanceRepo {
 pub trait BalanceRepoTrait {
     fn new(app_state: AppState) -> Self;
 
-    async fn get_all_token(&self) -> Result<Vec<TokenDb>, String>;
+    async fn get_all_token(
+        &self,
+    ) -> Result<Vec<(TokenDb, Option<IbcTokenDb>)>, String>;
 
     async fn get_address_balances(
         &self,
@@ -47,14 +49,19 @@ impl BalanceRepoTrait for BalanceRepo {
         .map_err(|e| e.to_string())
     }
 
-    async fn get_all_token(&self) -> Result<Vec<TokenDb>, String> {
+    async fn get_all_token(
+        &self,
+    ) -> Result<Vec<(TokenDb, Option<IbcTokenDb>)>, String> {
         let conn = self.app_state.get_db_connection().await;
 
         conn.interact(move |conn| {
             token::table
-                .distinct()
-                .select(TokenDb::as_select())
-                .get_results(conn)
+                .left_join(ibc_token::table)
+                .select((
+                    TokenDb::as_select(),
+                    Option::<IbcTokenDb>::as_select(),
+                ))
+                .load::<(TokenDb, Option<IbcTokenDb>)>(conn)
         })
         .await
         .map_err(|e| e.to_string())?

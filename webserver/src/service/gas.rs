@@ -1,21 +1,24 @@
 use bigdecimal::ToPrimitive;
 
 use crate::appstate::AppState;
+use crate::entity::gas::{GasEstimate, GasPrice};
+use crate::entity::transaction::TransactionKind;
 use crate::error::gas::GasError;
+use crate::repository::chain::{ChainRepository, ChainRepositoryTrait};
 use crate::repository::gas::{GasRepository, GasRepositoryTrait};
-use crate::response::gas::{GasEstimate, GasPrice};
-use crate::response::transaction::TransactionKind;
 
 #[derive(Clone)]
 pub struct GasService {
     gas_repo: GasRepository,
+    chain_repo: ChainRepository,
     default_gas_table: DefaultGasTable,
 }
 
 impl GasService {
     pub fn new(app_state: AppState) -> Self {
         Self {
-            gas_repo: GasRepository::new(app_state),
+            gas_repo: GasRepository::new(app_state.clone()),
+            chain_repo: ChainRepository::new(app_state),
             default_gas_table: DefaultGasTable::default(),
         }
     }
@@ -24,19 +27,45 @@ impl GasService {
         &self,
         token: String,
     ) -> Result<Vec<GasPrice>, GasError> {
+        let tokens = self
+            .chain_repo
+            .find_tokens()
+            .await
+            .map_err(GasError::Database)?;
+
         self.gas_repo
             .find_gas_price_by_token(token)
             .await
             .map_err(GasError::Database)
-            .map(|r| r.iter().cloned().map(GasPrice::from).collect())
+            .map(|r| {
+                r.iter()
+                    .cloned()
+                    .map(|gas_price| {
+                        GasPrice::from_db(gas_price, tokens.clone())
+                    })
+                    .collect()
+            })
     }
 
     pub async fn get_all_gas_prices(&self) -> Result<Vec<GasPrice>, GasError> {
+        let tokens = self
+            .chain_repo
+            .find_tokens()
+            .await
+            .map_err(GasError::Database)?;
+
         self.gas_repo
             .find_all_gas_prices()
             .await
             .map_err(GasError::Database)
-            .map(|r| r.iter().cloned().map(GasPrice::from).collect())
+            .map(|r| {
+                r.iter()
+                    .cloned()
+                    .map(|gas_price| {
+                        GasPrice::from_db(gas_price, tokens.clone())
+                    })
+                    .collect()
+            })
     }
 
     #[allow(clippy::too_many_arguments)]

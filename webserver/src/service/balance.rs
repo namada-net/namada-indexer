@@ -1,9 +1,11 @@
 use shared::balance::Amount;
+use shared::id::Id;
+use shared::token::{IbcToken, Token};
 
 use crate::appstate::AppState;
+use crate::entity::balance::Balance;
 use crate::error::balance::BalanceError;
 use crate::repository::balance::{BalanceRepo, BalanceRepoTrait};
-use crate::response::balance::AddressBalance;
 
 #[derive(Clone)]
 pub struct BalanceService {
@@ -20,10 +22,10 @@ impl BalanceService {
     pub async fn get_address_balances(
         &self,
         address: String,
-    ) -> Result<Vec<AddressBalance>, BalanceError> {
+    ) -> Result<Vec<Balance>, BalanceError> {
         let balances = self
             .balance_repo
-            .get_address_balances(address)
+            .get_address_balances(address.clone())
             .await
             .map_err(BalanceError::Database)?;
 
@@ -33,17 +35,23 @@ impl BalanceService {
             .await
             .map_err(BalanceError::Database)?;
 
-        // TODO: temporary solution as we only store NAM balances
         let denominated_balances = tokens
             .into_iter()
-            .map(|token| AddressBalance {
-                token_address: token.address.clone(),
-                min_denom_amount: balances
+            .map(|(token, ibc_token)| Balance {
+                owner: Id::Account(address.clone()),
+                token: match ibc_token {
+                    Some(ibc_token) => Token::Ibc(IbcToken {
+                        address: Id::Account(ibc_token.address),
+                        trace: Id::IbcTrace(ibc_token.ibc_trace),
+                    }),
+                    None => Token::Native(Id::Account(token.address.clone())),
+                },
+                amount: balances
                     .iter()
                     .find(|&balance| balance.token.eq(&token.address))
                     .cloned()
-                    .map(|balance| Amount::from(balance.raw_amount).to_string())
-                    .unwrap_or_else(|| Amount::zero().to_string()),
+                    .map(|balance| Amount::from(balance.raw_amount))
+                    .unwrap_or_else(Amount::zero),
             })
             .collect();
 

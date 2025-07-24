@@ -1,11 +1,12 @@
-use orm::masp::{
-    MaspPoolAggregateKindDb, MaspPoolAggregateWindowDb, MaspPoolDb,
-};
 use serde::{Deserialize, Serialize};
+
+use crate::entity::masp::{
+    MaspPoolAggregate, MaspPoolAggregateKind, MaspPoolAggregateWindow,
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub enum MaspPoolAggregateWindow {
+pub enum MaspPoolAggregateWindowResponse {
     OneDay,
     SevenDays,
     ThirtyDays,
@@ -14,7 +15,7 @@ pub enum MaspPoolAggregateWindow {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub enum MaspPoolAggregateKind {
+pub enum MaspPoolAggregateKindResponse {
     Inflows,
     Outflows,
 }
@@ -23,35 +24,35 @@ pub enum MaspPoolAggregateKind {
 #[serde(rename_all = "camelCase")]
 pub struct MaspPoolAggregateResponse {
     pub token_address: String,
-    pub time_window: MaspPoolAggregateWindow,
-    pub kind: MaspPoolAggregateKind,
+    pub time_window: MaspPoolAggregateWindowResponse,
+    pub kind: MaspPoolAggregateKindResponse,
     pub total_amount: String,
 }
 
-impl From<MaspPoolDb> for MaspPoolAggregateResponse {
-    fn from(value: MaspPoolDb) -> Self {
-        MaspPoolAggregateResponse {
-            token_address: value.token_address,
+impl From<MaspPoolAggregate> for MaspPoolAggregateResponse {
+    fn from(value: MaspPoolAggregate) -> Self {
+        Self {
+            token_address: value.token_address.to_string(),
             time_window: match value.time_window {
-                MaspPoolAggregateWindowDb::OneDay => {
-                    MaspPoolAggregateWindow::OneDay
+                MaspPoolAggregateWindow::OneDay => {
+                    MaspPoolAggregateWindowResponse::OneDay
                 }
-                MaspPoolAggregateWindowDb::SevenDays => {
-                    MaspPoolAggregateWindow::SevenDays
+                MaspPoolAggregateWindow::SevenDays => {
+                    MaspPoolAggregateWindowResponse::SevenDays
                 }
-                MaspPoolAggregateWindowDb::ThirtyDays => {
-                    MaspPoolAggregateWindow::ThirtyDays
+                MaspPoolAggregateWindow::ThirtyDays => {
+                    MaspPoolAggregateWindowResponse::ThirtyDays
                 }
-                MaspPoolAggregateWindowDb::AllTime => {
-                    MaspPoolAggregateWindow::AllTime
+                MaspPoolAggregateWindow::AllTime => {
+                    MaspPoolAggregateWindowResponse::AllTime
                 }
             },
             kind: match value.kind {
-                MaspPoolAggregateKindDb::Inflows => {
-                    MaspPoolAggregateKind::Inflows
+                MaspPoolAggregateKind::Inflows => {
+                    MaspPoolAggregateKindResponse::Inflows
                 }
-                MaspPoolAggregateKindDb::Outflows => {
-                    MaspPoolAggregateKind::Outflows
+                MaspPoolAggregateKind::Outflows => {
+                    MaspPoolAggregateKindResponse::Outflows
                 }
             },
             total_amount: value.total_amount.to_string(),

@@ -6,9 +6,9 @@ use namada_sdk::tendermint_rpc::HttpClient;
 use orm::revealed_pk::RevealedPkInsertDb;
 
 use crate::appstate::AppState;
+use crate::entity::pk::RevealedPk;
 use crate::error::revealed_pk::RevealedPkError;
 use crate::repository::revealed_pk::{PkRepoTrait, RevealedPkRepo};
-use crate::response::revealed_pk::RevealedPk;
 
 #[derive(Clone)]
 pub struct RevealedPkService {

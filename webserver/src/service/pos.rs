@@ -1,17 +1,18 @@
 use bigdecimal::{BigDecimal, Zero};
 use orm::helpers::OrderByDb;
 use orm::validators::{ValidatorSortByDb, ValidatorStateDb};
+use shared::crawler_state::ChainCrawlerState;
 use shared::parameters::Parameters;
 
 use crate::appstate::AppState;
 use crate::dto::pos::{OrderByDto, ValidatorSortFieldDto, ValidatorStateDto};
+use crate::entity::pos::{
+    Bond, BondStatus, MergedBond, MergedBondRedelegation, Reward, Unbond,
+    ValidatorWithRank, Withdraw,
+};
 use crate::error::pos::PoSError;
 use crate::repository::chain::{ChainRepository, ChainRepositoryTrait};
 use crate::repository::pos::{PosRepository, PosRepositoryTrait};
-use crate::response::pos::{
-    Bond, BondStatus, MergedBond, MergedBondRedelegation, Reward, Unbond,
-    ValidatorWithId, Withdraw,
-};
 
 #[derive(Clone)]
 pub struct PosService {
@@ -33,7 +34,7 @@ impl PosService {
         states: Vec<ValidatorStateDto>,
         sort_field: Option<ValidatorSortFieldDto>,
         sort_order: Option<OrderByDto>,
-    ) -> Result<(Vec<ValidatorWithId>, u64, u64), PoSError> {
+    ) -> Result<(Vec<ValidatorWithRank>, u64, u64), PoSError> {
         let validator_states = states
             .into_iter()
             .map(Self::to_validator_state_db)
@@ -61,7 +62,7 @@ impl PosService {
                     .iter()
                     .position(|v_id| v_id == &v.id)
                     .map(|r| (r + 1) as i32);
-                ValidatorWithId::from(v, rank)
+                ValidatorWithRank::from(v, rank)
             })
             .collect();
 
@@ -71,7 +72,7 @@ impl PosService {
     pub async fn get_all_validators(
         &self,
         states: Vec<ValidatorStateDto>,
-    ) -> Result<Vec<ValidatorWithId>, PoSError> {
+    ) -> Result<Vec<ValidatorWithRank>, PoSError> {
         let validator_states = states
             .into_iter()
             .map(Self::to_validator_state_db)
@@ -93,7 +94,7 @@ impl PosService {
                     .iter()
                     .position(|v_id| v_id == &v.id)
                     .map(|r| (r + 1) as i32);
-                ValidatorWithId::from(v, rank)
+                ValidatorWithRank::from(v, rank)
             })
             .collect();
 
@@ -144,6 +145,12 @@ impl PosService {
             .chain_repo
             .get_state()
             .await
+            .map(|chain_state| ChainCrawlerState {
+                last_processed_block: chain_state.last_processed_block as u32,
+                last_processed_epoch: chain_state.last_processed_epoch as u32,
+                first_block_in_epoch: chain_state.first_block_in_epoch as u32,
+                timestamp: chain_state.timestamp.and_utc().timestamp(),
+            })
             .map_err(PoSError::Database)?;
 
         let parameters_db = self
@@ -305,28 +312,17 @@ impl PosService {
         &self,
         address: String,
     ) -> Result<Vec<Reward>, PoSError> {
-        // TODO: could optimize and make a single query
-        let db_rewards = self
+        let rewards = self
             .pos_repo
             .find_rewards_by_address(address)
             .await
-            .map_err(PoSError::Database)?;
-
-        let mut rewards = vec![];
-        for db_reward in db_rewards {
-            let db_validator = self
-                .pos_repo
-                .find_validator_by_id(db_reward.validator_id)
-                .await;
-            if let Ok(Some(db_validator)) = db_validator {
-                rewards.push(Reward::from(db_reward.clone(), db_validator));
-            } else {
-                tracing::error!(
-                    "Couldn't find validator with id {} in bond query",
-                    db_reward.validator_id
-                );
-            }
-        }
+            .map(|rewards| {
+                rewards.into_iter().map(|(db_reward, db_validator)| {
+                    Reward::from(db_reward, db_validator)
+                })
+            })
+            .map_err(PoSError::Database)?
+            .collect::<Vec<_>>();
 
         Ok(rewards)
     }
@@ -337,9 +333,10 @@ impl PosService {
             .pos_repo
             .get_total_voting_power()
             .await
+            .map(|vp| vp.map(|vp| vp as u64))
             .map_err(PoSError::Database)?;
 
-        Ok(total_voting_power_db.unwrap_or_default() as u64)
+        Ok(total_voting_power_db.unwrap_or_default())
     }
 
     fn to_validator_state_db(value: ValidatorStateDto) -> ValidatorStateDb {

@@ -3,6 +3,7 @@ pub mod appstate;
 pub mod config;
 pub mod constant;
 pub mod dto;
+pub mod entity;
 pub mod error;
 pub mod handler;
 pub mod repository;

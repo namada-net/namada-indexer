@@ -4,10 +4,10 @@ use orm::governance_proposal::{
 
 use crate::appstate::AppState;
 use crate::dto::governance::{ProposalKind, ProposalStatus};
+use crate::entity::governance::{Proposal, ProposalVote};
 use crate::error::governance::GovernanceError;
 use crate::repository::chain::{ChainRepository, ChainRepositoryTrait};
 use crate::repository::governance::{GovernanceRepo, GovernanceRepoTrait};
-use crate::response::governance::{Proposal, ProposalVote};
 
 #[derive(Clone)]
 pub struct GovernanceService {
@@ -55,7 +55,7 @@ impl GovernanceService {
             db_proposals
                 .into_iter()
                 .map(|p| {
-                    Proposal::from_proposal_db(
+                    Proposal::from_db(
                         p,
                         &chain_state,
                         parameters.max_block_time,
@@ -111,7 +111,7 @@ impl GovernanceService {
         Ok(db_proposals
             .into_iter()
             .map(|p| {
-                Proposal::from_proposal_db(
+                Proposal::from_db(
                     p,
                     &chain_state,
                     parameters.max_block_time,
@@ -144,7 +144,7 @@ impl GovernanceService {
             .map_err(GovernanceError::Database)?;
 
         Ok(db_proposal.map(|p| {
-            Proposal::from_proposal_db(
+            Proposal::from_db(
                 p,
                 &chain_state,
                 parameters.max_block_time,

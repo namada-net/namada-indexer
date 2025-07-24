@@ -97,7 +97,7 @@ pub trait PosRepositoryTrait {
     async fn find_rewards_by_address(
         &self,
         address: String,
-    ) -> Result<Vec<PoSRewardDb>, String>;
+    ) -> Result<Vec<(PoSRewardDb, ValidatorDb)>, String>;
 
     async fn get_total_voting_power(&self) -> Result<Option<i64>, String>;
 
@@ -344,13 +344,14 @@ impl PosRepositoryTrait for PosRepository {
     async fn find_rewards_by_address(
         &self,
         address: String,
-    ) -> Result<Vec<PoSRewardDb>, String> {
+    ) -> Result<Vec<(PoSRewardDb, ValidatorDb)>, String> {
         let conn = self.app_state.get_db_connection().await;
 
         conn.interact(move |conn| {
             pos_rewards::table
+                .inner_join(validators::table)
                 .filter(pos_rewards::dsl::owner.eq(address))
-                .select(PoSRewardDb::as_select())
+                .select((PoSRewardDb::as_select(), ValidatorDb::as_select()))
                 .get_results(conn)
         })
         .await
