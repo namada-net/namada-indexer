@@ -39,13 +39,16 @@ pub async fn get_pgf_payment_by_proposal_id(
     _headers: HeaderMap,
     Path(proposal_id): Path<u64>,
     State(state): State<CommonState>,
-) -> Result<Json<Option<PgfPaymentResponse>>, ApiError> {
-    let pgf_payment = state
+) -> Result<Json<Vec<PgfPaymentResponse>>, ApiError> {
+    let pgf_payments = state
         .pgf_service
-        .find_pfg_payment_by_proposal_id(proposal_id)
+        .find_pfg_payments_by_proposal_id(proposal_id)
         .await?;
 
-    let response = pgf_payment.map(|payment| payment.into());
+    let response = pgf_payments
+        .into_iter()
+        .map(|payment| payment.into())
+        .collect();
 
     Ok(Json(response))
 }
