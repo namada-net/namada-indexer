@@ -7,7 +7,7 @@ use crate::schema::blocks;
 #[derive(Insertable, Clone, Queryable, Selectable, Debug)]
 #[diesel(table_name = blocks)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct BlockInsertDb {
+pub struct BlockDb {
     pub height: i32,
     pub hash: Option<String>,
     pub app_hash: Option<String>,
@@ -16,7 +16,7 @@ pub struct BlockInsertDb {
     pub epoch: Option<i32>,
 }
 
-pub type BlockDb = BlockInsertDb;
+pub type BlockInsertDb = BlockDb;
 
 impl From<(Block, TendermintBlockResponse)> for BlockInsertDb {
     fn from(

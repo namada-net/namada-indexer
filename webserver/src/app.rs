@@ -84,10 +84,6 @@ impl ApplicationServer {
                     get(gov_handlers::get_governance_proposals),
                 )
                 .route(
-                    "/gov/proposal/all",
-                    get(gov_handlers::get_all_governance_proposals),
-                )
-                .route(
                     "/gov/proposal/:id",
                     get(gov_handlers::get_governance_proposal_by_id),
                 )

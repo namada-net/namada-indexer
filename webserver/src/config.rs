@@ -1,11 +1,5 @@
 use shared::log_config::LogConfig;
 
-#[derive(clap::ValueEnum, Clone, Debug, Copy)]
-pub enum CargoEnv {
-    Development,
-    Production,
-}
-
 #[derive(clap::Parser, Clone)]
 pub struct AppConfig {
     #[clap(long, env, default_value = "5001")]
