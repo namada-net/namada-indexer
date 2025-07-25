@@ -123,13 +123,13 @@ impl From<TokenSupply> for TokenSupplyResponse {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CirculatingSupplyResponse {
-    pub circulating_supply: String,
+    pub amount: String,
 }
 
 impl From<CirculatingSupply> for CirculatingSupplyResponse {
     fn from(value: CirculatingSupply) -> Self {
         Self {
-            circulating_supply: value.circulating_supply,
+            amount: value.circulating_supply,
         }
     }
 }

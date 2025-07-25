@@ -1600,3 +1600,9 @@ components:
           type: number
         limit:
           type: number
+    CirculatingSupply:
+      type: object
+      required: [amount, tokenAddress]
+      properties:
+        amount:
+          type: string
