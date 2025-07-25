@@ -20,5 +20,10 @@ pub async fn get_masp_aggregates(
         .find_all_masp_aggregates(query.token)
         .await?;
 
-    Ok(Json(masp_aggregates))
+    let response = masp_aggregates
+        .into_iter()
+        .map(MaspPoolAggregateResponse::from)
+        .collect();
+
+    Ok(Json(response))
 }

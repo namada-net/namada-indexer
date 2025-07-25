@@ -1,7 +1,10 @@
+use orm::pgf::{PaymentKindDb, PaymentRecurrenceDb};
+use shared::id::Id;
+
 use crate::appstate::AppState;
+use crate::entity::pgf::{PaymentKind, PaymentRecurrence, PgfPayment};
 use crate::error::pgf::PgfError;
 use crate::repository::pgf::{PgfRepo, PgfRepoTrait};
-use crate::response::pgf::{PaymentKind, PaymentRecurrence, PgfPayment};
 
 #[derive(Clone)]
 pub struct PgfService {
@@ -28,37 +31,51 @@ impl PgfService {
         let payments = payments
             .into_iter()
             .map(|payment| PgfPayment {
-                payment_recurrence: PaymentRecurrence::from(
-                    payment.payment_recurrence,
-                ),
-                proposal_id: payment.proposal_id,
-                payment_kind: PaymentKind::from(payment.payment_kind),
-                receipient: payment.receipient,
-                amount: payment.amount.to_string(),
+                recurrence: match payment.payment_recurrence {
+                    PaymentRecurrenceDb::Continuous => {
+                        PaymentRecurrence::Continuous
+                    }
+                    PaymentRecurrenceDb::Retro => PaymentRecurrence::Retro,
+                },
+                proposal_id: payment.proposal_id as u64,
+                kind: match payment.payment_kind {
+                    PaymentKindDb::Ibc => PaymentKind::Ibc,
+                    PaymentKindDb::Native => PaymentKind::Native,
+                },
+                receipient: Id::Account(payment.receipient),
+                amount: payment.amount.into(),
             })
             .collect();
 
         Ok((payments, total_pages as u64, total_items as u64))
     }
 
-    pub async fn find_pfg_payment_by_proposal_id(
+    pub async fn find_pfg_payments_by_proposal_id(
         &self,
         proposal_id: u64,
-    ) -> Result<Option<PgfPayment>, PgfError> {
+    ) -> Result<Vec<PgfPayment>, PgfError> {
         let payment = self
             .pgf_repo
-            .find_pgf_payment_by_proposal_id(proposal_id as i32)
+            .find_pgf_payments_by_proposal_id(proposal_id as i32)
             .await
             .map_err(PgfError::Database)?
+            .into_iter()
             .map(|payment| PgfPayment {
-                payment_recurrence: PaymentRecurrence::from(
-                    payment.payment_recurrence,
-                ),
-                proposal_id: payment.proposal_id,
-                payment_kind: PaymentKind::from(payment.payment_kind),
-                receipient: payment.receipient,
-                amount: payment.amount.to_string(),
-            });
+                recurrence: match payment.payment_recurrence {
+                    PaymentRecurrenceDb::Continuous => {
+                        PaymentRecurrence::Continuous
+                    }
+                    PaymentRecurrenceDb::Retro => PaymentRecurrence::Retro,
+                },
+                proposal_id: payment.proposal_id as u64,
+                kind: match payment.payment_kind {
+                    PaymentKindDb::Ibc => PaymentKind::Ibc,
+                    PaymentKindDb::Native => PaymentKind::Native,
+                },
+                receipient: Id::Account(payment.receipient),
+                amount: payment.amount.into(),
+            })
+            .collect();
 
         Ok(payment)
     }

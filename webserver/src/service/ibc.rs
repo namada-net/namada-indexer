@@ -1,12 +1,13 @@
 use bigdecimal::BigDecimal;
 use orm::ibc::IbcAckStatusDb;
+use shared::id::Id;
 
 use crate::appstate::AppState;
-use crate::error::ibc::IbcError;
-use crate::repository::ibc::{IbcRepository, IbcRepositoryTrait};
-use crate::response::ibc::{
+use crate::entity::ibc::{
     IbcAck, IbcAckStatus, IbcRateLimit, IbcTokenFlow, IbcTokenThroughput,
 };
+use crate::error::ibc::IbcError;
+use crate::repository::ibc::{IbcRepository, IbcRepositoryTrait};
 
 #[derive(Clone)]
 pub struct IbcService {
@@ -54,17 +55,16 @@ impl IbcService {
             .get_throughput_limits(matching_token_address, matching_rate_limit)
             .await
             .map_err(IbcError::Database)
-            .map(|limits| unsafe {
-                // NB: Transmute this value. It's faster than destructing
-                // the vec and creating a new one, just to convert between
-                // types.
-
-                const _: () =
-                    assert_conversion_safety::<(String, String), IbcRateLimit>(
-                    );
-
-                // SAFETY: We have asserted the safety of the conversion above
-                std::mem::transmute(limits)
+            .map(|limits| {
+                limits
+                    .into_iter()
+                    .map(|(token_address, throughput_limit)| IbcRateLimit {
+                        token_address: Id::Account(token_address),
+                        throughput_limit: throughput_limit
+                            .parse()
+                            .expect("Should be a valid number"),
+                    })
+                    .collect()
             })
     }
 
@@ -76,18 +76,19 @@ impl IbcService {
             .get_token_flows(matching_token_address)
             .await
             .map_err(IbcError::Database)
-            .map(|flows| unsafe {
-                // NB: Transmute this value. It's faster than destructing
-                // the vec and creating a new one, just to convert between
-                // types.
-
-                const _: () = assert_conversion_safety::<
-                    (String, String, String),
-                    IbcTokenFlow,
-                >();
-
-                // SAFETY: We have asserted the safety of the conversion above
-                std::mem::transmute(flows)
+            .map(|flows| {
+                flows
+                    .into_iter()
+                    .map(|(token_address, withdraw, deposit)| IbcTokenFlow {
+                        token_address: Id::Account(token_address),
+                        withdraw: withdraw
+                            .parse()
+                            .expect("Should be a valid number"),
+                        deposit: deposit
+                            .parse()
+                            .expect("Should be a valid number"),
+                    })
+                    .collect()
             })
     }
 
@@ -99,29 +100,11 @@ impl IbcService {
             .get_token_throughput(token)
             .await
             .map_err(IbcError::Database)
-            .map(|throughput| unsafe {
-                // NB: Transmute this value. It's faster than destructing
-                // the vec and creating a new one, just to convert between
-                // types.
-
-                const _: () = assert_conversion_safety::<
-                    (String, String),
-                    IbcTokenThroughput,
-                >();
-
-                // SAFETY: We have asserted the safety of the conversion above
-                std::mem::transmute(throughput)
+            .map(|(throughput, limit)| IbcTokenThroughput {
+                throughput: throughput
+                    .parse()
+                    .expect("Should be a valid number"),
+                limit: limit.parse().expect("Should be a valid number"),
             })
-    }
-}
-
-#[allow(dead_code)]
-const fn assert_conversion_safety<From, To>() {
-    if std::mem::size_of::<From>() != std::mem::size_of::<To>() {
-        panic!("size is invalid");
-    }
-
-    if std::mem::align_of::<From>() != std::mem::align_of::<To>() {
-        panic!("alignment is invalid");
     }
 }

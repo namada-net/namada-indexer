@@ -103,7 +103,7 @@ pub trait PosRepositoryTrait {
         &self,
         address: String,
         epoch: Option<u64>,
-    ) -> Result<Vec<PoSRewardDb>, String>;
+    ) -> Result<Vec<(PoSRewardDb, ValidatorDb)>, String>;
 
     async fn find_rewards_by_delegator_and_validator_and_epoch(
         &self,
@@ -375,32 +375,43 @@ impl PosRepositoryTrait for PosRepository {
         &self,
         address: String,
         epoch: Option<u64>,
-    ) -> Result<Vec<PoSRewardDb>, String> {
+    ) -> Result<Vec<(PoSRewardDb, ValidatorDb)>, String> {
         let conn = self.app_state.get_db_connection().await;
 
-        conn.interact(
-            move |conn| -> Result<Vec<PoSRewardDb>, diesel::result::Error> {
-                let epoch = match epoch {
-                    Some(e) => e as i32,
-                    None => {
-                        // Properly propagate database errors with ?
-                        let max_epoch = pos_rewards::table
-                            .select(diesel::dsl::max(pos_rewards::epoch))
-                            .first::<Option<i32>>(conn)?;
+        conn.interact(move |conn| {
+            let epoch = match epoch {
+                Some(e) => e as i32,
+                None => {
+                    // Properly propagate database errors with ?
+                    let max_epoch = pos_rewards::table
+                        .select(diesel::dsl::max(pos_rewards::epoch))
+                        .first::<Option<i32>>(conn)?;
 
-                        max_epoch.unwrap_or(0) // This is fine - just unwrapping the Option, not a Result
-                    }
-                };
+                    max_epoch.unwrap_or(0) // This is fine - just unwrapping the Option, not a Result
+                }
+            };
 
-                // Propagate errors from this query too
-                pos_rewards::table
-                    .filter(pos_rewards::claimed.eq(&false))
-                    .filter(pos_rewards::epoch.eq(&epoch))
-                    .filter(pos_rewards::dsl::owner.eq(&address))
-                    .select(PoSRewardDb::as_select())
-                    .get_results(conn)
-            },
-        )
+            pos_rewards::table
+                .inner_join(validators::table)
+                .filter(pos_rewards::claimed.eq(&false))
+                .filter(pos_rewards::epoch.eq(&epoch))
+                .filter(pos_rewards::dsl::owner.eq(address))
+                .select((PoSRewardDb::as_select(), ValidatorDb::as_select()))
+                .get_results(conn)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+    }
+
+    async fn get_total_voting_power(&self) -> Result<Option<i64>, String> {
+        let conn = self.app_state.get_db_connection().await;
+
+        conn.interact(move |conn| {
+            validators::table
+                .select(sum(validators::dsl::voting_power))
+                .first(conn)
+        })
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| e.to_string())
@@ -421,19 +432,6 @@ impl PosRepositoryTrait for PosRepository {
                 .filter(pos_rewards::dsl::epoch.eq(epoch as i32))
                 .select(PoSRewardDb::as_select())
                 .get_results(conn)
-        })
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())
-    }
-
-    async fn get_total_voting_power(&self) -> Result<Option<i64>, String> {
-        let conn = self.app_state.get_db_connection().await;
-
-        conn.interact(move |conn| {
-            validators::table
-                .select(sum(validators::dsl::voting_power))
-                .first(conn)
         })
         .await
         .map_err(|e| e.to_string())?

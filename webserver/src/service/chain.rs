@@ -1,12 +1,12 @@
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, ToPrimitive};
 use shared::id::Id;
 use shared::token::{IbcToken, Token};
 
 use crate::appstate::AppState;
+use crate::entity::chain::{CirculatingSupply, Parameters, TokenSupply};
 use crate::error::chain::ChainError;
 use crate::repository::balance::{BalanceRepo, BalanceRepoTrait};
 use crate::repository::chain::{ChainRepository, ChainRepositoryTrait};
-use crate::response::chain::{CirculatingSupply, Parameters, TokenSupply};
 
 #[derive(Clone)]
 pub struct ChainService {
@@ -80,9 +80,11 @@ impl ChainService {
             .map_err(ChainError::Database)?;
 
         Ok(maybe_token_supply_db.map(|supply| TokenSupply {
-            address: supply.address,
-            total_supply: supply.total.to_string(),
-            effective_supply: supply.effective.map(|s| s.to_string()),
+            address: Id::Account(supply.address),
+            total_supply: supply.total.to_u64().expect("Should fit in u64"),
+            effective_supply: supply
+                .effective
+                .map(|s| s.to_u64().expect("Should fit in u64")),
         }))
     }
 

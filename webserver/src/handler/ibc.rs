@@ -10,7 +10,8 @@ use crate::dto::ibc::{
 };
 use crate::error::api::ApiError;
 use crate::response::ibc::{
-    IbcAck, IbcRateLimit, IbcTokenFlow, IbcTokenThroughput,
+    IbcAckResponse, IbcRateLimitResponse, IbcTokenFlowResponse,
+    IbcTokenThroughputResponse,
 };
 use crate::state::common::CommonState;
 
@@ -19,17 +20,19 @@ pub async fn get_ibc_status(
     _headers: HeaderMap,
     Path(tx_id): Path<String>,
     State(state): State<CommonState>,
-) -> Result<Json<IbcAck>, ApiError> {
+) -> Result<Json<IbcAckResponse>, ApiError> {
     let ibc_ack_status = state.ibc_service.get_ack_by_tx_id(tx_id).await?;
 
-    Ok(Json(ibc_ack_status))
+    let response = IbcAckResponse::from(ibc_ack_status);
+
+    Ok(Json(response))
 }
 
 #[debug_handler]
 pub async fn get_ibc_rate_limits(
     Query(query): Query<IbcRateLimitDto>,
     State(state): State<CommonState>,
-) -> Result<Json<Vec<IbcRateLimit>>, ApiError> {
+) -> Result<Json<Vec<IbcRateLimitResponse>>, ApiError> {
     let rate_limits = state
         .ibc_service
         .get_throughput_limits(
@@ -38,20 +41,30 @@ pub async fn get_ibc_rate_limits(
         )
         .await?;
 
-    Ok(Json(rate_limits))
+    let response = rate_limits
+        .into_iter()
+        .map(IbcRateLimitResponse::from)
+        .collect();
+
+    Ok(Json(response))
 }
 
 #[debug_handler]
 pub async fn get_ibc_token_flows(
     Query(query): Query<IbcTokenFlowDto>,
     State(state): State<CommonState>,
-) -> Result<Json<Vec<IbcTokenFlow>>, ApiError> {
+) -> Result<Json<Vec<IbcTokenFlowResponse>>, ApiError> {
     let token_flows = state
         .ibc_service
         .get_token_flows(query.token_address)
         .await?;
 
-    Ok(Json(token_flows))
+    let response = token_flows
+        .into_iter()
+        .map(IbcTokenFlowResponse::from)
+        .collect();
+
+    Ok(Json(response))
 }
 
 #[debug_handler]
@@ -59,8 +72,10 @@ pub async fn get_ibc_token_throughput(
     //_headers: HeaderMap,
     Path(token): Path<String>,
     State(state): State<CommonState>,
-) -> Result<Json<IbcTokenThroughput>, ApiError> {
+) -> Result<Json<IbcTokenThroughputResponse>, ApiError> {
     let throughput = state.ibc_service.get_token_throughput(token).await?;
 
-    Ok(Json(throughput))
+    let response = IbcTokenThroughputResponse::from(throughput);
+
+    Ok(Json(response))
 }
