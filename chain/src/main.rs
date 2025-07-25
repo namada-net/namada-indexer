@@ -257,11 +257,6 @@ async fn crawling_fn(
 
     let start = Instant::now();
 
-    let cometbft_block =
-        get_cometbft_block_with_fallback(&conn, &client, block_height)
-            .await
-            .into_db_error()?;
-
     tracing::debug!(block = block_height, "Query first block in epoch...");
     let first_block_in_epoch =
         namada_service::get_first_block_in_epoch(&client)
@@ -972,43 +967,6 @@ pub async fn get_cometbft_block_with_fallback(
                 block,
                 events,
                 epoch,
-            }
-        }
-    };
-
-    Ok(block)
-}
-
-pub async fn get_cometbft_block_with_fallback(
-    conn: &Object,
-    client: &HttpClient,
-    block_height: u32,
-) -> anyhow::Result<CometbftBlock> {
-    let block = repository::cometbft::get_block(conn, block_height)
-        .await
-        .context("Failed to get block")?;
-
-    let block = match block {
-        Some(block) => block,
-        None => {
-            let block = tendermint_service::query_raw_block_at_height(
-                client,
-                block_height,
-            )
-            .await
-            .context("Failed to query block")?;
-
-            let events = tendermint_service::query_raw_block_results_at_height(
-                client,
-                block_height,
-            )
-            .await
-            .context("Failed to query block results")?;
-
-            CometbftBlock {
-                block_height,
-                block,
-                events,
             }
         }
     };

@@ -1631,6 +1631,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "deunicode"
+version = "1.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abd57806937c9cc163efc8ea3910e00a62e2aeb0b8119f1793a978088f8f6b04"
+
+[[package]]
 name = "diesel"
 version = "2.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1795,6 +1801,18 @@ dependencies = [
  "darling",
  "either",
  "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
+]
+
+[[package]]
+name = "dummy"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cac124e13ae9aa56acc4241f8c8207501d93afdd8d8e62f0c1f2e12f6508c65"
+dependencies = [
+ "darling",
  "proc-macro2",
  "quote",
  "syn 2.0.104",
@@ -2359,6 +2377,17 @@ checksum = "7cd915d99f24784cdc19fd37ef22b97e3ff0ae756c7e492e9fbfe897d61e2aec"
 dependencies = [
  "indenter",
  "once_cell",
+]
+
+[[package]]
+name = "fake"
+version = "2.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d391ba4af7f1d93f01fcf7b2f29e2bc9348e109dfdbf4dcbdc51dfa38dab0b6"
+dependencies = [
+ "deunicode",
+ "dummy",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -4247,9 +4276,9 @@ checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
 name = "masp_note_encryption"
-version = "1.4.2"
+version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8356332f25f08373e411b56c05d9fcf47b40dd309fd55a61a8bccaea40329085"
+checksum = "db7c7a5152930bc961a8ffb0f6df4b705a4a9cd71ccd812671d9acac632c3b69"
 dependencies = [
  "borsh",
  "chacha20",
@@ -4261,9 +4290,9 @@ dependencies = [
 
 [[package]]
 name = "masp_primitives"
-version = "1.4.2"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46580817a8b7620e7e04502b87fa410292718f9dedf6f133af45df5cc8cca053"
+checksum = "57c4482dd67fb614da7840a08b56d387e43ec8a06129e4f7bdba02900f4e3dbc"
 dependencies = [
  "aes",
  "bip0039",
@@ -4293,9 +4322,9 @@ dependencies = [
 
 [[package]]
 name = "masp_proofs"
-version = "1.4.2"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f62beae5d8cba55d36e6cdc3a0f706fd18a9cdbb9fa25420fe8ea74a12500d26"
+checksum = "f07358ecd7aa622deec656874eee2d309dcd9f046f89022105336de73d97b34f"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -7099,6 +7128,7 @@ dependencies = [
  "bimap",
  "clap",
  "clap-verbosity-flag",
+ "fake",
  "futures",
  "futures-core",
  "futures-util",

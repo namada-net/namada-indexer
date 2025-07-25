@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as SerdeJSONValue;
 use shared::token::Token as SharedToken;
 
-use crate::entity::chain::{Parameters, TokenSupply};
+use crate::entity::chain::{CirculatingSupply, Parameters, TokenSupply};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -122,6 +122,14 @@ impl From<TokenSupply> for TokenSupplyResponse {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CirculatingSupply {
+pub struct CirculatingSupplyResponse {
     pub circulating_supply: String,
+}
+
+impl From<CirculatingSupply> for CirculatingSupplyResponse {
+    fn from(value: CirculatingSupply) -> Self {
+        Self {
+            circulating_supply: value.circulating_supply,
+        }
+    }
 }

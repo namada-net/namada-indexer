@@ -47,6 +47,7 @@ diesel-derive-enum = { version = "2.1.0", features = ["postgres"] }
 diesel_migrations = { version = "2.2.0", default-features = false, features = [
   "postgres",
 ] }
+fake = { version = "2.10.0", features = ["derive"] }
 futures = "0.3.30"
 futures-core = "0.3.30"
 futures-util = "0.3.30"

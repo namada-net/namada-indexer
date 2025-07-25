@@ -27,33 +27,51 @@ impl BlockService {
     pub async fn get_block_by_hash(
         &self,
         hash: String,
-    ) -> Result<Block, BlockError> {
+    ) -> Result<(Block, Option<Block>, Vec<WrapperTransaction>), BlockError>
+    {
         let block = self
             .block_repo
             .find_block_by_hash(hash.clone())
             .await
-            .map_err(BlockError::Database)?;
+            .map_err(BlockError::Database)?
+            .map(Block::from_db);
+
         let block = block.ok_or(BlockError::NotFound(
             "hash".to_string(),
             hash.to_string(),
         ))?;
+
+        let block_height = block.height as i32;
+
         let prev_block = if let Some(block_height) = block.height.checked_sub(1)
         {
             self.block_repo
-                .find_block_by_height(block_height)
+                .find_block_by_height(block_height as i32)
                 .await
                 .map_err(BlockError::Database)?
+                .map(Block::from_db)
         } else {
             None
         };
 
-        let transactions = self
-            .transaction_repo
-            .find_txs_by_block_height(block.height)
+        let tokens = self
+            .chain_repo
+            .find_tokens()
             .await
             .map_err(BlockError::Database)?;
 
-        Ok(Block::from(block, prev_block, transactions))
+        let transactions = self
+            .transaction_repo
+            .find_txs_by_block_height(block_height)
+            .await
+            .map_err(BlockError::Database)?;
+
+        let transactions = transactions
+            .into_iter()
+            .map(|tx| WrapperTransaction::from_db(tx, tokens.clone()))
+            .collect();
+
+        Ok((block, prev_block, transactions))
     }
 
     pub async fn get_block_by_height(
@@ -93,11 +111,11 @@ impl BlockService {
             .transaction_repo
             .find_txs_by_block_height(height)
             .await
-            .map_err(BlockError::Database)?
+            .map_err(BlockError::Database)?;
+
+        let transactions = transactions
             .into_iter()
-            .map(|transaction| {
-                WrapperTransaction::from_db(transaction, tokens.clone())
-            })
+            .map(|tx| WrapperTransaction::from_db(tx, tokens.clone()))
             .collect();
 
         Ok((block, prev_block, transactions))
@@ -143,11 +161,11 @@ impl BlockService {
             .transaction_repo
             .find_txs_by_block_height(block_height)
             .await
-            .map_err(BlockError::Database)?
+            .map_err(BlockError::Database)?;
+
+        let transactions = transactions
             .into_iter()
-            .map(|transaction| {
-                WrapperTransaction::from_db(transaction, tokens.clone())
-            })
+            .map(|tx| WrapperTransaction::from_db(tx, tokens.clone()))
             .collect();
 
         Ok((block, prev_block, transactions))

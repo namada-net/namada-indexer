@@ -19,6 +19,7 @@ bigdecimal.workspace = true
 bimap.workspace = true
 clap.workspace = true
 clap-verbosity-flag.workspace = true
+fake.workspace = true
 futures.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true

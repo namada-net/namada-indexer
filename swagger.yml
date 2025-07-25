@@ -431,7 +431,7 @@ paths:
                       $ref: "#/components/schemas/Proposal"
                   pagination:
                     $ref: "#/components/schemas/Pagination"
-  /api/v1/pgf/payments/{proposal_id}:
+  /api/v1/pgf/payments/{id}:
     get:
       summary: Get a pgf payment by proposal id
       parameters:
@@ -1423,6 +1423,8 @@ components:
         gasUsed:
           type: number
         blockHeight:
+          type: number
+        maspFeePayment:
           type: string
         innerTransactions:
           type: array

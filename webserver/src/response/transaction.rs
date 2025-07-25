@@ -88,6 +88,8 @@ impl From<TransactionKind> for TransactionKindResponse {
             TransactionKind::ReactivateValidator => Self::ReactivateValidator,
             TransactionKind::UnjailValidator => Self::UnjailValidator,
             TransactionKind::Unknown => Self::Unknown,
+            TransactionKind::ChangeConsensusKey => Self::ChangeConsensusKey,
+            TransactionKind::InitAccount => Self::InitAccount,
         }
     }
 }
@@ -118,9 +120,7 @@ impl WrapperTransactionResponse {
             fee_token: wrapper.fee_token.into(),
             gas_limit: wrapper.gas_limit.to_string(),
             gas_used: wrapper.gas_used,
-            amount_per_gas_unit: wrapper
-                .amount_per_gas_unit
-                .map(|gas_per_unit| gas_per_unit.to_string()),
+            amount_per_gas_unit: wrapper.amount_per_gas_unit,
             block_height: wrapper.block_height,
             inner_transactions: inners
                 .into_iter()

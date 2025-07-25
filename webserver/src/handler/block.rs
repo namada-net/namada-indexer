@@ -40,8 +40,11 @@ pub async fn get_block_by_hash(
     _headers: HeaderMap,
     Path(value): Path<String>,
     State(state): State<CommonState>,
-) -> Result<Json<Block>, ApiError> {
-    let block = state.block_service.get_block_by_hash(value).await?;
+) -> Result<Json<BlockResponse>, ApiError> {
+    let (block, prev_block, transactions) =
+        state.block_service.get_block_by_hash(value).await?;
 
-    Ok(Json(block))
+    let response = BlockResponse::from(block, prev_block, transactions);
+
+    Ok(Json(response))
 }

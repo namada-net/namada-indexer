@@ -21,7 +21,7 @@ impl GasPrice {
                     match ibc_token {
                         Some(ibc_token) => Some(Token::Ibc(IbcToken {
                             address: Id::Account(ibc_token.address),
-                            trace: Id::IbcTrace(ibc_token.ibc_trace),
+                            trace: Some(Id::IbcTrace(ibc_token.ibc_trace)),
                         })),
                         None => Some(Token::Native(Id::Account(token.address))),
                     }

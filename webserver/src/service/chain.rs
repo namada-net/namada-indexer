@@ -1,9 +1,9 @@
-use bigdecimal::ToPrimitive;
+use bigdecimal::{BigDecimal, ToPrimitive};
 use shared::id::Id;
 use shared::token::{IbcToken, Token};
 
 use crate::appstate::AppState;
-use crate::entity::chain::{Parameters, TokenSupply};
+use crate::entity::chain::{CirculatingSupply, Parameters, TokenSupply};
 use crate::error::chain::ChainError;
 use crate::repository::balance::{BalanceRepo, BalanceRepoTrait};
 use crate::repository::chain::{ChainRepository, ChainRepositoryTrait};
