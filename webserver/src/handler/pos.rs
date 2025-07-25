@@ -186,9 +186,29 @@ pub async fn get_rewards(
     Path(address): Path<String>,
     State(state): State<CommonState>,
 ) -> Result<Json<Vec<RewardResponse>>, ApiError> {
-    let rewards = state.pos_service.get_rewards_by_address(address).await?;
+    let rewards = state
+        .pos_service
+        .get_rewards_by_address(address, query.epoch)
+        .await?;
     let response = rewards.into_iter().map(RewardResponse::from).collect();
 
+    Ok(Json(response))
+}
+
+#[debug_handler]
+pub async fn get_rewards_by_delegator_and_validator_and_epoch(
+    _headers: HeaderMap,
+    Path((delegator, validator, epoch)): Path<(String, String, u64)>,
+    State(state): State<CommonState>,
+) -> Result<Json<Vec<RewardResponse>>, ApiError> {
+    let rewards = state
+        .pos_service
+        .get_rewards_by_delegator_and_validator_and_epoch(
+            delegator, validator, epoch,
+        )
+        .await?;
+
+    let response = rewards.into_iter().map(RewardResponse::from).collect();
     Ok(Json(response))
 }
 

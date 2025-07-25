@@ -59,3 +59,8 @@ pub struct TokenSupply {
     pub total_supply: u64,
     pub effective_supply: Option<u64>,
 }
+
+#[derive(Clone, Debug)]
+pub struct CirculatingSupply {
+    pub circulating_supply: String,
+}

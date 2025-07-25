@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::entity::block::Block;
-use crate::entity::transaction::{InnerTransaction, WrapperTransaction};
-use crate::response::transaction::ShortInnerTransactionResponse;
+use crate::entity::transaction::WrapperTransaction;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -14,7 +13,6 @@ pub struct BlockResponse {
     pub proposer: Option<String>,
     pub transactions: Vec<String>,
     pub parent_app_hash: Option<String>,
-    pub masp_fee_payment: Option<ShortInnerTransactionResponse>,
     pub parent_hash: Option<String>,
     pub epoch: Option<String>,
 }
@@ -24,7 +22,6 @@ impl BlockResponse {
         block: Block,
         prev_block: Option<Block>,
         transactions: Vec<WrapperTransaction>,
-        masp_fee_payment: Option<InnerTransaction>,
     ) -> Self {
         Self {
             height: block.height,
@@ -38,9 +35,8 @@ impl BlockResponse {
                 .into_iter()
                 .map(|wrapper| wrapper.id.to_string())
                 .collect(),
-            masp_fee_payment: masp_fee_payment
-                .map(ShortInnerTransactionResponse::from),
             parent_app_hash: prev_block
+                .clone()
                 .map(|block| block.app_hash)
                 .unwrap_or(None)
                 .map(|hash| hash.to_string()),

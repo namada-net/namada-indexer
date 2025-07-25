@@ -15,8 +15,9 @@ use crate::dto::chain::{
 };
 use crate::error::api::ApiError;
 use crate::response::chain::{
-    LastProcessedBlockResponse, LastProcessedEpochResponse, ParametersResponse,
-    RpcUrlResponse, TokenResponse, TokenSupplyResponse,
+    CirculatingSupplyResponse, LastProcessedBlockResponse,
+    LastProcessedEpochResponse, ParametersResponse, RpcUrlResponse,
+    TokenResponse, TokenSupplyResponse,
 };
 use crate::state::common::CommonState;
 
@@ -126,10 +127,11 @@ pub async fn get_token_supply(
 pub async fn get_circulating_supply(
     Query(query): Query<CirculatingSupplyDto>,
     State(state): State<CommonState>,
-) -> Result<Json<CirculatingSupplyRsp>, ApiError> {
+) -> Result<Json<CirculatingSupplyResponse>, ApiError> {
     let supply = state
         .chain_service
         .get_circulating_supply(query.epoch)
         .await?;
-    Ok(Json(supply))
+
+    Ok(Json(CirculatingSupplyResponse::from(supply)))
 }

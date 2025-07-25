@@ -31,6 +31,8 @@ pub enum TransactionKind {
     DeactivateValidator,
     ReactivateValidator,
     UnjailValidator,
+    ChangeConsensusKey,
+    InitAccount,
     Unknown,
 }
 
@@ -67,6 +69,8 @@ impl From<TransactionKindDb> for TransactionKind {
             TransactionKindDb::ReactivateValidator => Self::ReactivateValidator,
             TransactionKindDb::DeactivateValidator => Self::DeactivateValidator,
             TransactionKindDb::UnjailValidator => Self::UnjailValidator,
+            TransactionKindDb::ChangeConsensusKey => Self::ChangeConsensusKey,
+            TransactionKindDb::InitAccount => Self::InitAccount,
         }
     }
 }
@@ -79,6 +83,7 @@ pub struct WrapperTransaction {
     pub gas_limit: u64,
     pub gas_used: Option<u64>,
     pub amount_per_gas_unit: Option<f64>,
+    pub masp_fee_payment: Option<String>,
     pub block_height: u64,
     pub exit_code: TransactionExitStatus,
     pub atomic: bool,
@@ -111,7 +116,7 @@ impl WrapperTransaction {
                     match ibc_token {
                         Some(ibc_token) => Some(Token::Ibc(IbcToken {
                             address: Id::Account(ibc_token.address),
-                            trace: Id::IbcTrace(ibc_token.ibc_trace),
+                            trace: Some(Id::IbcTrace(ibc_token.ibc_trace)),
                         })),
                         None => Some(Token::Native(Id::Account(token.address))),
                     }
@@ -133,6 +138,7 @@ impl WrapperTransaction {
             amount_per_gas_unit: transaction
                 .amount_per_gas_unit
                 .map(|g| g.parse::<f64>().expect("Should be a number")),
+            masp_fee_payment: transaction.masp_fee_payment,
             block_height: transaction.block_height as u64,
             exit_code: TransactionExitStatus::from(transaction.exit_code),
             atomic: transaction.atomic,

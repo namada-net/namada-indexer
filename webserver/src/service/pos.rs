@@ -313,17 +313,25 @@ impl PosService {
         address: String,
         epoch: Option<u64>,
     ) -> Result<Vec<Reward>, PoSError> {
-        let rewards = self
+        let db_rewards = self
             .pos_repo
             .find_rewards_by_address(address, epoch)
             .await
-            .map(|rewards| {
-                rewards.into_iter().map(|(db_reward, db_validator)| {
-                    Reward::from(db_reward, db_validator)
-                })
-            })
-            .map_err(PoSError::Database)?
-            .collect::<Vec<_>>();
+            .map_err(PoSError::Database)?;
+
+        let mut rewards = vec![];
+        for (db_reward, db_validator) in db_rewards {
+            let db_validator =
+                self.pos_repo.find_validator_by_id(db_validator.id).await;
+            if let Ok(Some(db_validator)) = db_validator {
+                rewards.push(Reward::from(db_reward.clone(), db_validator));
+            } else {
+                tracing::error!(
+                    "Couldn't find validator with id {} in bond query",
+                    db_reward.validator_id
+                );
+            }
+        }
 
         Ok(rewards)
     }

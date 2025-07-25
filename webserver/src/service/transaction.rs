@@ -1,5 +1,3 @@
-use orm::transactions::WrapperTransactionDb;
-
 use crate::appstate::AppState;
 use crate::entity::transaction::{
     InnerTransaction, TransactionHistory, WrapperTransaction,
@@ -40,19 +38,8 @@ impl TransactionService {
             .await
             .map_err(TransactionError::Database)?;
 
-        let masp_fee_payment = if let Some(WrapperTransactionDb {
-            masp_fee_payment: Some(masp_fee_payment),
-            ..
-        }) = &wrapper_tx
-        {
-            self.get_inner_tx(masp_fee_payment.to_owned()).await?
-        } else {
-            None
-        };
-
-        Ok(wrapper_tx.map(|wrapper| {
-            WrapperTransaction::from_db(wrapper, tokens, masp_fee_payment)
-        }))
+        Ok(wrapper_tx
+            .map(|wrapper| WrapperTransaction::from_db(wrapper, tokens)))
     }
 
     pub async fn get_inner_tx(
