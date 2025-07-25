@@ -1,1 +1,0 @@
-DROP TABLE IF EXISTS cometbft_block;
