@@ -1572,7 +1572,7 @@ components:
         kind:
           type: string
           enum: [received, sent]
-        block_height:
+        blockHeight:
           type: number
     IbcRateLimit:
       type: object
@@ -1602,7 +1602,7 @@ components:
           type: number
     CirculatingSupply:
       type: object
-      required: [amount, tokenAddress]
+      required: [amount]
       properties:
         amount:
           type: string
