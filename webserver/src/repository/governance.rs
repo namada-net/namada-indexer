@@ -25,7 +25,7 @@ pub trait GovernanceRepoTrait {
 
     async fn find_governance_proposals(
         &self,
-        status: Option<GovernanceProposalResultDb>,
+        status: Option<Vec<GovernanceProposalResultDb>>,
         kind: Option<GovernanceProposalKindDb>,
         pattern: Option<String>,
         page: i64,
@@ -33,7 +33,7 @@ pub trait GovernanceRepoTrait {
 
     async fn find_all_governance_proposals(
         &self,
-        status: Option<GovernanceProposalResultDb>,
+        status: Option<Vec<GovernanceProposalResultDb>>,
         kind: Option<GovernanceProposalKindDb>,
         pattern: Option<String>,
     ) -> Result<Vec<GovernanceProposalDb>, String>;
@@ -69,7 +69,7 @@ impl GovernanceRepoTrait for GovernanceRepo {
 
     async fn find_governance_proposals(
         &self,
-        status: Option<GovernanceProposalResultDb>,
+        status: Option<Vec<GovernanceProposalResultDb>>,
         kind: Option<GovernanceProposalKindDb>,
         pattern: Option<String>,
         page: i64,
@@ -91,7 +91,7 @@ impl GovernanceRepoTrait for GovernanceRepo {
 
     async fn find_all_governance_proposals(
         &self,
-        status: Option<GovernanceProposalResultDb>,
+        status: Option<Vec<GovernanceProposalResultDb>>,
         kind: Option<GovernanceProposalKindDb>,
         pattern: Option<String>,
     ) -> Result<Vec<GovernanceProposalDb>, String> {
@@ -187,15 +187,15 @@ impl GovernanceRepoTrait for GovernanceRepo {
 impl<'a> GovernanceRepo {
     fn governance_proposals(
         &self,
-        status: Option<GovernanceProposalResultDb>,
+        status: Option<Vec<GovernanceProposalResultDb>>,
         kind: Option<GovernanceProposalKindDb>,
         pattern: Option<String>,
     ) -> IntoBoxed<'a, governance_proposals::table, Pg> {
         let mut query = governance_proposals::table.into_boxed();
 
         if let Some(status) = status {
-            query = query
-                .filter(governance_proposals::dsl::result.eq(status.clone()))
+            query =
+                query.filter(governance_proposals::dsl::result.eq_any(status))
         }
 
         if let Some(kind) = kind {

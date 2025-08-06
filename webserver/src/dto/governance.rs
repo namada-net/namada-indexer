@@ -25,7 +25,7 @@ pub enum ProposalKind {
 pub struct ProposalQueryParams {
     #[validate(range(min = 1, max = 10000))]
     pub page: Option<u64>,
-    pub status: Option<ProposalStatus>,
+    pub status: Option<Vec<ProposalStatus>>,
     pub kind: Option<ProposalKind>,
     pub pattern: Option<String>,
 }

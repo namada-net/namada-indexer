@@ -1,6 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
+use axum_extra::extract::Query as QueryExt;
 use axum_macros::debug_handler;
 
 use crate::dto::governance::{ProposalQueryParams, ProposalVotesQueryparams};
@@ -13,7 +14,7 @@ use crate::state::common::CommonState;
 #[debug_handler]
 pub async fn get_governance_proposals(
     _headers: HeaderMap,
-    Query(query): Query<ProposalQueryParams>,
+    QueryExt(query): QueryExt<ProposalQueryParams>,
     State(state): State<CommonState>,
 ) -> Result<Json<PaginatedResponse<Vec<Proposal>>>, ApiError> {
     let page = query.page.unwrap_or(1);
@@ -35,7 +36,7 @@ pub async fn get_governance_proposals(
 #[debug_handler]
 pub async fn get_all_governance_proposals(
     _headers: HeaderMap,
-    Query(query): Query<ProposalQueryParams>,
+    QueryExt(query): QueryExt<ProposalQueryParams>,
     State(state): State<CommonState>,
 ) -> Result<Json<Vec<Proposal>>, ApiError> {
     let proposals = state
