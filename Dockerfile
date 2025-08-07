@@ -9,17 +9,17 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 WORKDIR /app
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --valgrind --recipe-path recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 ARG PACKAGE
 RUN cargo install cargo-valgrind
-RUN cargo build --valgrind --locked --bin ${PACKAGE}
+RUN cargo build --release --locked --bin ${PACKAGE}
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y libpq5 ca-certificates curl
 WORKDIR /app
 ARG PACKAGE
-COPY --from=builder /app/target/valgrind/${PACKAGE} ./
+COPY --from=builder /app/target/release/${PACKAGE} ./
 COPY --from=builder /app/.cargo/bin/cargo-valgrind /usr/local/bin/
 RUN mv ./${PACKAGE} ./service
 
