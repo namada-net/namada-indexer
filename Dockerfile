@@ -20,6 +20,6 @@ RUN apt-get update && apt-get install -y libpq5 ca-certificates curl
 WORKDIR /app
 ARG PACKAGE
 COPY --from=builder /app/target/release/${PACKAGE} ./
-COPY --from=builder /app/.cargo/bin/cargo-valgrind /usr/local/bin/
+COPY --from=builder /usr/local/cargo/bin/cargo-valgrind /usr/local/bin/
 RUN mv ./${PACKAGE} ./service
 
