@@ -1,12 +1,13 @@
 use async_trait::async_trait;
-use diesel::dsl::IntoBoxed;
+use diesel::dsl::{IntoBoxed, exists};
 use diesel::pg::Pg;
 use diesel::{
-    BoolExpressionMethods, ExpressionMethods, PgTextExpressionMethods,
-    QueryDsl, RunQueryDsl, SelectableHelper,
+    BoolExpressionMethods, ExpressionMethods, OptionalExtension,
+    PgTextExpressionMethods, QueryDsl, RunQueryDsl, SelectableHelper, select,
 };
 use orm::governance_proposal::{
-    GovernanceProposalDb, GovernanceProposalKindDb, GovernanceProposalResultDb,
+    GovernanceProposalData, GovernanceProposalKindDb,
+    GovernanceProposalNoDataDb, GovernanceProposalResultDb,
 };
 use orm::governance_votes::GovernanceProposalVoteDb;
 use orm::schema::{governance_proposals, governance_votes};
@@ -23,25 +24,28 @@ pub struct GovernanceRepo {
 pub trait GovernanceRepoTrait {
     fn new(app_state: AppState) -> Self;
 
+    async fn governance_proposal_exists(
+        &self,
+        proposal_id: i32,
+    ) -> Result<bool, String>;
+
+    async fn find_proposal_data_by_id(
+        &self,
+        proposal_id: i32,
+    ) -> Result<Option<GovernanceProposalData>, String>;
+
     async fn find_governance_proposals(
         &self,
         status: Option<GovernanceProposalResultDb>,
         kind: Option<GovernanceProposalKindDb>,
         pattern: Option<String>,
         page: i64,
-    ) -> Result<PaginatedResponseDb<GovernanceProposalDb>, String>;
-
-    async fn find_all_governance_proposals(
-        &self,
-        status: Option<GovernanceProposalResultDb>,
-        kind: Option<GovernanceProposalKindDb>,
-        pattern: Option<String>,
-    ) -> Result<Vec<GovernanceProposalDb>, String>;
+    ) -> Result<PaginatedResponseDb<GovernanceProposalNoDataDb>, String>;
 
     async fn find_governance_proposals_by_id(
         &self,
         proposal_id: i32,
-    ) -> Result<Option<GovernanceProposalDb>, String>;
+    ) -> Result<Option<GovernanceProposalNoDataDb>, String>;
 
     async fn find_governance_proposal_votes(
         &self,
@@ -73,13 +77,13 @@ impl GovernanceRepoTrait for GovernanceRepo {
         kind: Option<GovernanceProposalKindDb>,
         pattern: Option<String>,
         page: i64,
-    ) -> Result<PaginatedResponseDb<GovernanceProposalDb>, String> {
+    ) -> Result<PaginatedResponseDb<GovernanceProposalNoDataDb>, String> {
         let conn = self.app_state.get_db_connection().await;
         let query = self.governance_proposals(status, kind, pattern);
 
         conn.interact(move |conn| {
             query
-                .select(GovernanceProposalDb::as_select())
+                .select(GovernanceProposalNoDataDb::as_select())
                 .order(governance_proposals::dsl::id.desc())
                 .paginate(page)
                 .load_and_count_pages(conn)
@@ -89,20 +93,36 @@ impl GovernanceRepoTrait for GovernanceRepo {
         .map_err(|e| e.to_string())
     }
 
-    async fn find_all_governance_proposals(
+    async fn governance_proposal_exists(
         &self,
-        status: Option<GovernanceProposalResultDb>,
-        kind: Option<GovernanceProposalKindDb>,
-        pattern: Option<String>,
-    ) -> Result<Vec<GovernanceProposalDb>, String> {
+        proposal_id: i32,
+    ) -> Result<bool, String> {
         let conn = self.app_state.get_db_connection().await;
-        let query = self.governance_proposals(status, kind, pattern);
 
         conn.interact(move |conn| {
-            query
-                .select(GovernanceProposalDb::as_select())
-                .order(governance_proposals::dsl::id.desc())
-                .load(conn)
+            select(exists(
+                governance_proposals::table
+                    .filter(governance_proposals::dsl::id.eq(proposal_id)),
+            ))
+            .get_result(conn)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+    }
+
+    async fn find_proposal_data_by_id(
+        &self,
+        proposal_id: i32,
+    ) -> Result<Option<GovernanceProposalData>, String> {
+        let conn = self.app_state.get_db_connection().await;
+
+        conn.interact(move |conn| {
+            governance_proposals::table
+                .find(proposal_id)
+                .select(GovernanceProposalData::as_select())
+                .first(conn)
+                .optional()
         })
         .await
         .map_err(|e| e.to_string())?
@@ -112,13 +132,13 @@ impl GovernanceRepoTrait for GovernanceRepo {
     async fn find_governance_proposals_by_id(
         &self,
         proposal_id: i32,
-    ) -> Result<Option<GovernanceProposalDb>, String> {
+    ) -> Result<Option<GovernanceProposalNoDataDb>, String> {
         let conn = self.app_state.get_db_connection().await;
 
         conn.interact(move |conn| {
             governance_proposals::table
                 .find(proposal_id)
-                .select(GovernanceProposalDb::as_select())
+                .select(GovernanceProposalNoDataDb::as_select())
                 .first(conn)
                 .ok()
         })

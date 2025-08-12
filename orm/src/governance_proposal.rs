@@ -165,3 +165,30 @@ impl From<GovernanceProposalStatus> for GovernanceProposalUpdateStatusDb {
         }
     }
 }
+
+#[derive(Serialize, Queryable, Selectable, Insertable, Clone)]
+#[diesel(table_name = governance_proposals)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct GovernanceProposalNoDataDb {
+    pub id: i32,
+    pub content: String,
+    pub kind: GovernanceProposalKindDb,
+    pub tally_type: GovernanceProposalTallyTypeDb,
+    pub author: String,
+    pub start_epoch: i32,
+    pub end_epoch: i32,
+    pub activation_epoch: i32,
+    pub yay_votes: String,
+    pub nay_votes: String,
+    pub abstain_votes: String,
+    pub result: GovernanceProposalResultDb,
+}
+
+#[derive(Serialize, Queryable, Selectable, Insertable, Clone)]
+#[diesel(table_name = governance_proposals)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct GovernanceProposalData {
+    pub id: i32,
+    pub kind: GovernanceProposalKindDb,
+    pub data: Option<String>,
+}

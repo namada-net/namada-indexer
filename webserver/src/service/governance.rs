@@ -1,10 +1,14 @@
 use orm::governance_proposal::{
     GovernanceProposalKindDb, GovernanceProposalResultDb,
 };
+use sha256::digest;
+use subtle_encoding::hex;
 
 use crate::appstate::AppState;
 use crate::dto::governance::{ProposalKind, ProposalStatus};
-use crate::entity::governance::{Proposal, ProposalVote};
+use crate::entity::governance::{
+    Proposal, ProposalData, ProposalType, ProposalVote,
+};
 use crate::error::governance::GovernanceError;
 use crate::repository::chain::{ChainRepository, ChainRepositoryTrait};
 use crate::repository::governance::{GovernanceRepo, GovernanceRepoTrait};
@@ -71,54 +75,36 @@ impl GovernanceService {
     pub async fn find_proposal_data(
         &self,
         proposal_id: u64,
-    ) -> Result<Option<Option<String>>, GovernanceError> {
-        let db_proposal = self
+    ) -> Result<ProposalData, GovernanceError> {
+        let proposal_data = self
             .governance_repo
-            .find_governance_proposals_by_id(proposal_id as i32)
+            .find_proposal_data_by_id(proposal_id as i32)
             .await
             .map_err(GovernanceError::Database)?;
 
-        Ok(db_proposal.map(|proposal| proposal.data))
-    }
+        let data = if let Some(data) = proposal_data {
+            data
+        } else {
+            return Err(GovernanceError::NotFound(proposal_id));
+        };
 
-    pub async fn find_all_governance_proposals(
-        &self,
-        status: Option<ProposalStatus>,
-        kind: Option<ProposalKind>,
-        pattern: Option<String>,
-    ) -> Result<Vec<Proposal>, GovernanceError> {
-        let kind = self.map_kind(kind);
-        let status = self.map_status(status);
+        let hash = match data.kind {
+            GovernanceProposalKindDb::DefaultWithWasm => {
+                let hex_decoded_bytes =
+                    hex::decode(data.data.clone().unwrap_or_default())
+                        .unwrap_or_default();
+                Some(digest(hex_decoded_bytes))
+            }
+            _ => None,
+        };
 
-        let db_proposals = self
-            .governance_repo
-            .find_all_governance_proposals(status, kind, pattern)
-            .await
-            .map_err(GovernanceError::Database)?;
+        let proposal_data = ProposalData {
+            data: data.data,
+            hash,
+            r#type: ProposalType::from(data.kind),
+        };
 
-        let chain_state = self
-            .chain_repo
-            .get_state()
-            .await
-            .map_err(GovernanceError::Database)?;
-
-        let parameters = self
-            .chain_repo
-            .find_chain_parameters()
-            .await
-            .map_err(GovernanceError::Database)?;
-
-        Ok(db_proposals
-            .into_iter()
-            .map(|p| {
-                Proposal::from_db(
-                    p,
-                    &chain_state,
-                    parameters.max_block_time,
-                    parameters.min_duration,
-                )
-            })
-            .collect())
+        Ok(proposal_data)
     }
 
     pub async fn find_governance_proposal_by_id(

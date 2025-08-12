@@ -3,7 +3,8 @@ use std::fmt::Display;
 use serde::{Deserialize, Serialize};
 
 use crate::entity::governance::{
-    Proposal, ProposalStatus, ProposalType, ProposalVote, TallyType, VoteType,
+    Proposal, ProposalData, ProposalStatus, ProposalType, ProposalVote,
+    TallyType, VoteType,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -107,7 +108,6 @@ pub struct ProposalResponse {
     pub content: String,
     pub r#type: ProposalTypeResponse,
     pub tally_type: TallyTypeResponse,
-    pub data: Option<String>,
     pub author: String,
     pub start_epoch: u64,
     pub end_epoch: u64,
@@ -144,7 +144,6 @@ impl From<Proposal> for ProposalResponse {
                     TallyTypeResponse::LessOneHalfOverOneThirdNay
                 }
             },
-            data: value.data,
             author: value.author.to_string(),
             start_epoch: value.start_epoch,
             end_epoch: value.end_epoch,
@@ -192,6 +191,31 @@ impl From<ProposalVote> for ProposalVoteResponse {
                 VoteType::Unknown => VoteTypeResponse::Unknown,
             },
             voter_address: value.voter_address.to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalDataResponse {
+    pub data: Option<String>,
+    pub hash: Option<String>,
+    pub r#type: ProposalTypeResponse,
+}
+
+impl From<ProposalData> for ProposalDataResponse {
+    fn from(value: ProposalData) -> Self {
+        Self {
+            data: value.data,
+            hash: value.hash,
+            r#type: match value.r#type {
+                ProposalType::Default => ProposalTypeResponse::Default,
+                ProposalType::DefaultWithWasm => {
+                    ProposalTypeResponse::DefaultWithWasm
+                }
+                ProposalType::PgfSteward => ProposalTypeResponse::PgfSteward,
+                ProposalType::PgfFunding => ProposalTypeResponse::PgfFunding,
+            },
         }
     }
 }

@@ -1,7 +1,7 @@
 use orm::crawler_state::ChainCrawlerStateDb;
 use orm::governance_proposal::{
-    GovernanceProposalDb, GovernanceProposalKindDb, GovernanceProposalResultDb,
-    GovernanceProposalTallyTypeDb,
+    GovernanceProposalKindDb, GovernanceProposalNoDataDb,
+    GovernanceProposalResultDb, GovernanceProposalTallyTypeDb,
 };
 use orm::governance_votes::{GovernanceProposalVoteDb, GovernanceVoteKindDb};
 use shared::id::Id;
@@ -81,7 +81,6 @@ pub struct Proposal {
     pub content: String,
     pub r#type: ProposalType,
     pub tally_type: TallyType,
-    pub data: Option<String>,
     pub author: Id,
     pub start_epoch: u64,
     pub end_epoch: u64,
@@ -124,7 +123,7 @@ pub struct ProposalVote {
 
 impl Proposal {
     pub fn from_db(
-        value: GovernanceProposalDb,
+        value: GovernanceProposalNoDataDb,
         chain_state: &ChainCrawlerStateDb,
         max_block_time: i32,
         min_duration: i32,
@@ -171,7 +170,6 @@ impl Proposal {
             content: value.content,
             r#type: ProposalType::from(value.kind),
             tally_type: TallyType::from(value.tally_type),
-            data: value.data,
             author: Id::Account(value.author),
             start_epoch: value.start_epoch as u64,
             end_epoch: value.end_epoch as u64,
@@ -205,4 +203,11 @@ impl From<GovernanceProposalVoteDb> for ProposalVote {
             voter_address: Id::Account(value.voter_address),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct ProposalData {
+    pub data: Option<String>,
+    pub hash: Option<String>,
+    pub r#type: ProposalType,
 }

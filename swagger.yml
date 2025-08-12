@@ -482,6 +482,10 @@ paths:
       responses:
         "200":
           description: A Governance proposal data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProposalData"
   /api/v1/gov/proposal/{id}/votes:
     get:
       summary: Get all the votes for a governance proposal
@@ -1142,6 +1146,17 @@ components:
         abstainVotes:
           type: number
           format: float
+    ProposalData:
+      type: object
+      required: [type]
+      properties:
+        data:
+          type: string
+        hash:
+          type: string
+        type:
+          type: string
+          enum: [default, defaultWithWasm, pgfSteward, pgfFunding]
     PgfPayment:
       type: object
       required: [proposal_id, receipient, amount, kind, recurrence]

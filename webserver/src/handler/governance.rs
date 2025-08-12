@@ -6,7 +6,9 @@ use axum_macros::debug_handler;
 use crate::dto::governance::{ProposalQueryParams, ProposalVotesQueryparams};
 use crate::error::api::ApiError;
 use crate::error::governance::GovernanceError;
-use crate::response::governance::{ProposalResponse, ProposalVoteResponse};
+use crate::response::governance::{
+    ProposalDataResponse, ProposalResponse, ProposalVoteResponse,
+};
 use crate::response::utils::PaginatedResponse;
 use crate::state::common::CommonState;
 
@@ -63,18 +65,12 @@ pub async fn get_proposal_data_by_proposal_id(
     _headers: HeaderMap,
     Path(proposal_id): Path<u64>,
     State(state): State<CommonState>,
-) -> Result<String, ApiError> {
+) -> Result<Json<ProposalDataResponse>, ApiError> {
     let proposal = state.gov_service.find_proposal_data(proposal_id).await?;
 
-    if let Some(data) = proposal {
-        if let Some(data) = data {
-            Ok(data)
-        } else {
-            Err(GovernanceError::DataNotFound(proposal_id).into())
-        }
-    } else {
-        Err(GovernanceError::NotFound(proposal_id).into())
-    }
+    let response = ProposalDataResponse::from(proposal);
+
+    Ok(Json(response))
 }
 
 #[debug_handler]
