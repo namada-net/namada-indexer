@@ -106,3 +106,6 @@ bech32 = "0.11.0"
 reqwest = { version = "0.11.27", features = ["json", "cookies"] }
 itertools = "0.14.0"
 mimalloc = "0.1.47"
+
+[profile.release]
+debug = 2
