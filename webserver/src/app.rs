@@ -210,10 +210,13 @@ impl ApplicationServer {
 
         let router = Router::new()
             .nest("/api/v1", routes)
-            .merge(Router::new().route(
+            .merge(
+                Router::new()
+                .route(
                 "/health",
                 get(|| async { json!({"commit": env!("VERGEN_GIT_SHA").to_string(), "version": env!("CARGO_PKG_VERSION") }).to_string() }),
-            ))
+            ).route("/debug/pprof/allocs", get(handle_get_heap))
+        .route("/debug/pprof/allocs/flamegraph", get(handle_get_heap_flamegraph)))
             .layer(
                 ServiceBuilder::new()
                     .layer(TraceLayer::new_for_http())
@@ -288,5 +291,47 @@ impl ApplicationServer {
                 }
             )),
         )
+    }
+}
+
+pub async fn handle_get_heap() -> Result<impl IntoResponse, (StatusCode, String)>
+{
+    let mut prof_ctl = jemalloc_pprof::PROF_CTL.as_ref().unwrap().lock().await;
+    require_profiling_activated(&prof_ctl)?;
+    let pprof = prof_ctl
+        .dump_pprof()
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    Ok(pprof)
+}
+
+pub async fn handle_get_heap_flamegraph()
+-> Result<impl IntoResponse, (StatusCode, String)> {
+    use axum::body::Body;
+    use axum::http::header::CONTENT_TYPE;
+    use axum::response::Response;
+
+    let mut prof_ctl = jemalloc_pprof::PROF_CTL.as_ref().unwrap().lock().await;
+    require_profiling_activated(&prof_ctl)?;
+    let svg = prof_ctl
+        .dump_flamegraph()
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    Response::builder()
+        .header(CONTENT_TYPE, "image/svg+xml")
+        .body(Body::from(svg))
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
+}
+
+/// Checks whether jemalloc profiling is activated an returns an error response
+/// if not.
+fn require_profiling_activated(
+    prof_ctl: &jemalloc_pprof::JemallocProfCtl,
+) -> Result<(), (StatusCode, String)> {
+    if prof_ctl.activated() {
+        Ok(())
+    } else {
+        Err((
+            axum::http::StatusCode::FORBIDDEN,
+            "heap profiling not activated".into(),
+        ))
     }
 }
