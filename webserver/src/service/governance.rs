@@ -25,7 +25,7 @@ impl GovernanceService {
 
     pub async fn find_governance_proposals(
         &self,
-        status: Option<ProposalStatus>,
+        status: Option<Vec<ProposalStatus>>,
         kind: Option<ProposalKind>,
         pattern: Option<String>,
         page: u64,
@@ -83,7 +83,7 @@ impl GovernanceService {
 
     pub async fn find_all_governance_proposals(
         &self,
-        status: Option<ProposalStatus>,
+        status: Option<Vec<ProposalStatus>>,
         kind: Option<ProposalKind>,
         pattern: Option<String>,
     ) -> Result<Vec<Proposal>, GovernanceError> {
@@ -232,21 +232,31 @@ impl GovernanceService {
 
     fn map_status(
         &self,
-        status: Option<ProposalStatus>,
-    ) -> Option<GovernanceProposalResultDb> {
-        status.map(|s| match s {
-            ProposalStatus::Pending => GovernanceProposalResultDb::Pending,
-            ProposalStatus::VotingPeriod => {
-                GovernanceProposalResultDb::VotingPeriod
-            }
-            ProposalStatus::Passed => GovernanceProposalResultDb::Passed,
-            ProposalStatus::Rejected => GovernanceProposalResultDb::Rejected,
-            ProposalStatus::ExecutedPassed => {
-                GovernanceProposalResultDb::ExecutedPassed
-            }
-            ProposalStatus::ExecutedRejected => {
-                GovernanceProposalResultDb::ExecutedRejected
-            }
+        status: Option<Vec<ProposalStatus>>,
+    ) -> Option<Vec<GovernanceProposalResultDb>> {
+        status.map(|s| {
+            s.iter()
+                .map(|s| match s {
+                    ProposalStatus::Pending => {
+                        GovernanceProposalResultDb::Pending
+                    }
+                    ProposalStatus::VotingPeriod => {
+                        GovernanceProposalResultDb::VotingPeriod
+                    }
+                    ProposalStatus::Passed => {
+                        GovernanceProposalResultDb::Passed
+                    }
+                    ProposalStatus::Rejected => {
+                        GovernanceProposalResultDb::Rejected
+                    }
+                    ProposalStatus::ExecutedPassed => {
+                        GovernanceProposalResultDb::ExecutedPassed
+                    }
+                    ProposalStatus::ExecutedRejected => {
+                        GovernanceProposalResultDb::ExecutedRejected
+                    }
+                })
+                .collect()
         })
     }
 

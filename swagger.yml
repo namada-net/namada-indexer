@@ -394,16 +394,17 @@ paths:
         - in: query
           name: status
           schema:
-            type: string
-            enum:
-              [
-                pending,
-                votingPeriod,
-                passed,
-                rejected,
-                executedPassed,
-                executedRejected,
-              ]
+            type: array
+            items:
+              enum:
+                [
+                  pending,
+                  votingPeriod,
+                  passed,
+                  rejected,
+                  executedPassed,
+                  executedRejected,
+                ]
           description: The status of the proposal
         - in: query
           name: kind
@@ -438,16 +439,17 @@ paths:
         - in: query
           name: status
           schema:
-            type: string
-            enum:
-              [
-                pending,
-                votingPeriod,
-                passed,
-                rejected,
-                executedPassed,
-                executedRejected,
-              ]
+            type: array
+            items:
+              enum:
+                [
+                  pending,
+                  votingPeriod,
+                  passed,
+                  rejected,
+                  executedPassed,
+                  executedRejected,
+                ]
           description: The status of the proposal
         - in: query
           name: kind
