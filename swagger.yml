@@ -1008,6 +1008,44 @@ paths:
                       type: number
                     last_processed_block_height:
                       type: number
+  /api/v1/chain/recent-inner:
+    get:
+      summary: Get a paginated list of inner transactions starting with the most recent
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+          description: Pagination parameter
+        - in: query
+          name: number
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Number of transactions to return (default 10)
+        - in: query
+          name: kind
+          schema:
+            type: string
+          description: Comma-separated list of transaction kinds to filter by (e.g., "bond,withdraw,claimRewards"). If not specified, all transaction kinds are included.
+      responses:
+        "200":
+          description: Paginated list of recent inner transactions with block heights.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results, pagination]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/InnerTransactionWithHeight"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
   /api/v1/chain/history:
     get:
       summary: Get a paginated list of transaction for a list of addresses
@@ -1528,6 +1566,58 @@ components:
           type: string
         epoch:
           type: string
+    InnerTransactionWithHeight:
+      type: object
+      required: [txId, blockHeight, kind, exitCode]
+      properties:
+        txId:
+          type: string
+          description: The transaction ID
+        blockHeight:
+          type: integer
+          description: The block height where this transaction was included
+        kind:
+          type: string
+          enum:
+            [
+              "transparentTransfer",
+              "shieldedTransfer",
+              "shieldingTransfer",
+              "unshieldingTransfer",
+              "mixedTransfer",
+              "bond",
+              "redelegation",
+              "unbond",
+              "withdraw",
+              "claimRewards",
+              "voteProposal",
+              "initProposal",
+              "changeMetadata",
+              "changeCommission",
+              "revealPk",
+              "ibcMsgTransfer",
+              "ibcTransparentTransfer",
+              "ibcShieldingTransfer",
+              "ibcUnshieldingTransfer",
+              "becomeValidator",
+              "deactivateValidator",
+              "reactivateValidator",
+              "unjailValidator",
+              "initAccount",
+              "changeConsensusKey",
+              "unknown",
+            ]
+          description: The type of transaction
+        data:
+          type: string
+          description: Optional transaction data (hex encoded)
+        memo:
+          type: string
+          description: Optional transaction memo
+        exitCode:
+          type: string
+          enum: [applied, rejected]
+          description: Whether the transaction was applied or rejected
     TransactionHistory:
       type: object
       required: [txId, kind, wrapperId, exitCode]
