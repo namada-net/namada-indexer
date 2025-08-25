@@ -70,6 +70,17 @@ pub struct ShortInnerTransaction {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct InnerTransactionWithHeight {
+    pub tx_id: String,
+    pub block_height: u64,
+    pub kind: TransactionKind,
+    pub data: Option<String>,
+    pub memo: Option<String>,
+    pub exit_code: TransactionResult,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InnerTransaction {
     pub tx_id: String,
     pub wrapper_id: String,
@@ -202,6 +213,19 @@ impl From<InnerTransactionDb> for InnerTransaction {
             data: value.data,
             memo: value.memo,
             exit_code: TransactionResult::from(value.exit_code),
+        }
+    }
+}
+
+impl From<(InnerTransactionDb, i32)> for InnerTransactionWithHeight {
+    fn from((inner_tx, block_height): (InnerTransactionDb, i32)) -> Self {
+        Self {
+            tx_id: inner_tx.id,
+            block_height: block_height as u64,
+            kind: TransactionKind::from(inner_tx.kind),
+            data: inner_tx.data,
+            memo: inner_tx.memo,
+            exit_code: TransactionResult::from(inner_tx.exit_code),
         }
     }
 }

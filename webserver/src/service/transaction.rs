@@ -6,7 +6,7 @@ use crate::repository::tranasaction::{
     TransactionRepository, TransactionRepositoryTrait,
 };
 use crate::response::transaction::{
-    InnerTransaction, TransactionHistory, TransactionKind, WrapperTransaction,
+    InnerTransaction, InnerTransactionWithHeight, TransactionHistory, TransactionKind, WrapperTransaction,
 };
 use orm::transactions::TransactionKindDb;
 
@@ -101,7 +101,7 @@ impl TransactionService {
         number: Option<u64>,
         page: u64,
         kinds: Option<Vec<TransactionKind>>,
-    ) -> Result<(Vec<InnerTransaction>, u64, u64), TransactionError> {
+    ) -> Result<(Vec<InnerTransactionWithHeight>, u64, u64), TransactionError> {
         let kinds_db = kinds.map(|kinds| {
             kinds.into_iter().map(TransactionKindDb::from).collect()
         });
@@ -113,7 +113,7 @@ impl TransactionService {
             .map_err(TransactionError::Database)?;
 
         Ok((
-            transactions.into_iter().map(InnerTransaction::from).collect(),
+            transactions.into_iter().map(InnerTransactionWithHeight::from).collect(),
             total_pages as u64,
             total_items as u64,
         ))

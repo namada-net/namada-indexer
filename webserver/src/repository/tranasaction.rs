@@ -50,7 +50,7 @@ pub trait TransactionRepositoryTrait {
         number: Option<u64>,
         page: i64,
         kinds: Option<Vec<TransactionKindDb>>,
-    ) -> Result<PaginatedResponseDb<InnerTransactionDb>, String>;
+    ) -> Result<PaginatedResponseDb<(InnerTransactionDb, i32)>, String>;
 }
 
 #[async_trait]
@@ -159,12 +159,14 @@ impl TransactionRepositoryTrait for TransactionRepository {
         number: Option<u64>,
         page: i64,
         kinds: Option<Vec<TransactionKindDb>>,
-    ) -> Result<PaginatedResponseDb<InnerTransactionDb>, String> {
+    ) -> Result<PaginatedResponseDb<(InnerTransactionDb, i32)>, String> {
         let conn = self.app_state.get_db_connection().await;
         let limit = number.unwrap_or(10) as i64;
 
         conn.interact(move |conn| {
-            let mut query = inner_transactions::table.into_boxed();
+            let mut query = inner_transactions::table
+                .inner_join(wrapper_transactions::table.on(inner_transactions::dsl::wrapper_id.eq(wrapper_transactions::dsl::id)))
+                .into_boxed();
 
             // Filter by transaction kind if specified, otherwise default to return all kinds
             if let Some(kinds) = kinds {
@@ -172,10 +174,11 @@ impl TransactionRepositoryTrait for TransactionRepository {
             }
 
             query
-                .order(inner_transactions::dsl::id.desc())
+                .order(wrapper_transactions::dsl::block_height.desc())
                 .limit(limit)
+                .select((inner_transactions::all_columns, wrapper_transactions::dsl::block_height))
                 .paginate(page)
-                .load_and_count_pages::<InnerTransactionDb>(conn)
+                .load_and_count_pages::<(InnerTransactionDb, i32)>(conn)
         })
         .await
         .map_err(|e| e.to_string())?

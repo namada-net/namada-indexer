@@ -10,7 +10,7 @@ use crate::dto::transaction::{
 use crate::error::api::ApiError;
 use crate::error::transaction::TransactionError;
 use crate::response::transaction::{
-    InnerTransaction, TransactionHistory, WrapperTransaction,
+    InnerTransaction, InnerTransactionWithHeight, TransactionHistory, WrapperTransaction,
 };
 use crate::response::utils::PaginatedResponse;
 use crate::state::common::CommonState;
@@ -90,7 +90,7 @@ pub async fn get_recent_inner(
     _headers: HeaderMap,
     Query(query): Query<RecentInnerQueryParams>,
     State(state): State<CommonState>,
-) -> Result<Json<PaginatedResponse<Vec<InnerTransaction>>>, ApiError> {
+) -> Result<Json<PaginatedResponse<Vec<InnerTransactionWithHeight>>>, ApiError> {
     let page = query.page.unwrap_or(1);
 
     let (transactions, total_pages, total_items) = state
