@@ -139,6 +139,39 @@ impl From<TransactionKindDb> for TransactionKind {
     }
 }
 
+impl From<TransactionKind> for TransactionKindDb {
+    fn from(value: TransactionKind) -> Self {
+        match value {
+            TransactionKind::TransparentTransfer => Self::TransparentTransfer,
+            TransactionKind::ShieldedTransfer => Self::ShieldedTransfer,
+            TransactionKind::ShieldingTransfer => Self::ShieldingTransfer,
+            TransactionKind::UnshieldingTransfer => Self::UnshieldingTransfer,
+            TransactionKind::MixedTransfer => Self::MixedTransfer,
+            TransactionKind::Bond => Self::Bond,
+            TransactionKind::Redelegation => Self::Redelegation,
+            TransactionKind::Unbond => Self::Unbond,
+            TransactionKind::Withdraw => Self::Withdraw,
+            TransactionKind::ClaimRewards => Self::ClaimRewards,
+            TransactionKind::VoteProposal => Self::VoteProposal,
+            TransactionKind::InitProposal => Self::InitProposal,
+            TransactionKind::ChangeMetadata => Self::ChangeMetadata,
+            TransactionKind::ChangeCommission => Self::ChangeCommission,
+            TransactionKind::RevealPk => Self::RevealPk,
+            TransactionKind::IbcMsgTransfer => Self::IbcMsgTransfer,
+            TransactionKind::IbcTransparentTransfer => Self::IbcTransparentTransfer,
+            TransactionKind::IbcShieldingTransfer => Self::IbcShieldingTransfer,
+            TransactionKind::IbcUnshieldingTransfer => Self::IbcUnshieldingTransfer,
+            TransactionKind::BecomeValidator => Self::BecomeValidator,
+            TransactionKind::DeactivateValidator => Self::DeactivateValidator,
+            TransactionKind::ReactivateValidator => Self::ReactivateValidator,
+            TransactionKind::UnjailValidator => Self::UnjailValidator,
+            TransactionKind::InitAccount => Self::InitAccount,
+            TransactionKind::ChangeConsensusKey => Self::ChangeConsensusKey,
+            TransactionKind::Unknown => Self::Unknown,
+        }
+    }
+}
+
 impl From<WrapperTransactionDb> for WrapperTransaction {
     fn from(value: WrapperTransactionDb) -> Self {
         Self {

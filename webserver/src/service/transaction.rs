@@ -6,8 +6,9 @@ use crate::repository::tranasaction::{
     TransactionRepository, TransactionRepositoryTrait,
 };
 use crate::response::transaction::{
-    InnerTransaction, TransactionHistory, WrapperTransaction,
+    InnerTransaction, TransactionHistory, TransactionKind, WrapperTransaction,
 };
+use orm::transactions::TransactionKindDb;
 
 #[derive(Clone)]
 pub struct TransactionService {
@@ -90,6 +91,29 @@ impl TransactionService {
             txs.into_iter()
                 .map(|(h, t, bh)| TransactionHistory::from(h, t, bh))
                 .collect(),
+            total_pages as u64,
+            total_items as u64,
+        ))
+    }
+
+    pub async fn get_recent_inner(
+        &self,
+        number: Option<u64>,
+        page: u64,
+        kinds: Option<Vec<TransactionKind>>,
+    ) -> Result<(Vec<InnerTransaction>, u64, u64), TransactionError> {
+        let kinds_db = kinds.map(|kinds| {
+            kinds.into_iter().map(TransactionKindDb::from).collect()
+        });
+
+        let (transactions, total_pages, total_items) = self
+            .transaction_repo
+            .find_recent_inner_txs(number, page as i64, kinds_db)
+            .await
+            .map_err(TransactionError::Database)?;
+
+        Ok((
+            transactions.into_iter().map(InnerTransaction::from).collect(),
             total_pages as u64,
             total_items as u64,
         ))

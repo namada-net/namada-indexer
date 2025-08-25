@@ -134,6 +134,10 @@ impl ApplicationServer {
                     get(transaction_handlers::get_inner_tx),
                 )
                 .route(
+                    "/chain/recent-inner",
+                    get(transaction_handlers::get_recent_inner),
+                )
+                .route(
                     "/chain/history",
                     get(transaction_handlers::get_transaction_history),
                 )

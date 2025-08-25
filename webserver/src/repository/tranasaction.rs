@@ -6,7 +6,7 @@ use orm::schema::{
     inner_transactions, transaction_history, wrapper_transactions,
 };
 use orm::transactions::{
-    InnerTransactionDb, TransactionHistoryDb, WrapperTransactionDb,
+    InnerTransactionDb, TransactionHistoryDb, TransactionKindDb, WrapperTransactionDb,
 };
 
 use super::utils::{Paginate, PaginatedResponseDb};
@@ -45,6 +45,12 @@ pub trait TransactionRepositoryTrait {
         &self,
         block_height: i32,
     ) -> Result<Vec<WrapperTransactionDb>, String>;
+    async fn find_recent_inner_txs(
+        &self,
+        number: Option<u64>,
+        page: i64,
+        kinds: Option<Vec<TransactionKindDb>>,
+    ) -> Result<PaginatedResponseDb<InnerTransactionDb>, String>;
 }
 
 #[async_trait]
@@ -142,6 +148,34 @@ impl TransactionRepositoryTrait for TransactionRepository {
                 )
                 .select(WrapperTransactionDb::as_select())
                 .get_results(conn)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+    }
+
+    async fn find_recent_inner_txs(
+        &self,
+        number: Option<u64>,
+        page: i64,
+        kinds: Option<Vec<TransactionKindDb>>,
+    ) -> Result<PaginatedResponseDb<InnerTransactionDb>, String> {
+        let conn = self.app_state.get_db_connection().await;
+        let limit = number.unwrap_or(10) as i64;
+
+        conn.interact(move |conn| {
+            let mut query = inner_transactions::table.into_boxed();
+
+            // Filter by transaction kind if specified, otherwise default to return all kinds
+            if let Some(kinds) = kinds {
+                query = query.filter(inner_transactions::dsl::kind.eq_any(kinds));
+            }
+
+            query
+                .order(inner_transactions::dsl::id.desc())
+                .limit(limit)
+                .paginate(page)
+                .load_and_count_pages::<InnerTransactionDb>(conn)
         })
         .await
         .map_err(|e| e.to_string())?

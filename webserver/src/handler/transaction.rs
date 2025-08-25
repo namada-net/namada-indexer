@@ -4,7 +4,9 @@ use axum::http::HeaderMap;
 use axum_extra::extract::Query;
 use axum_macros::debug_handler;
 
-use crate::dto::transaction::TransactionHistoryQueryParams;
+use crate::dto::transaction::{
+    RecentInnerQueryParams, TransactionHistoryQueryParams,
+};
 use crate::error::api::ApiError;
 use crate::error::transaction::TransactionError;
 use crate::response::transaction::{
@@ -75,6 +77,25 @@ pub async fn get_transaction_history(
     let (transactions, total_pages, total_items) = state
         .transaction_service
         .get_addresses_history(query.addresses, page)
+        .await?;
+
+    let response =
+        PaginatedResponse::new(transactions, page, total_pages, total_items);
+
+    Ok(Json(response))
+}
+
+#[debug_handler]
+pub async fn get_recent_inner(
+    _headers: HeaderMap,
+    Query(query): Query<RecentInnerQueryParams>,
+    State(state): State<CommonState>,
+) -> Result<Json<PaginatedResponse<Vec<InnerTransaction>>>, ApiError> {
+    let page = query.page.unwrap_or(1);
+
+    let (transactions, total_pages, total_items) = state
+        .transaction_service
+        .get_recent_inner(query.number, page, query.kind)
         .await?;
 
     let response =
