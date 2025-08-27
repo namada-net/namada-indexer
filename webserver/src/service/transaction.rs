@@ -98,17 +98,59 @@ impl TransactionService {
 
     pub async fn get_recent_inner(
         &self,
-        number: Option<u64>,
+        limit: Option<u64>,
         page: u64,
         kinds: Option<Vec<TransactionKind>>,
+        tokens: Option<Vec<String>>,
     ) -> Result<(Vec<InnerTransactionWithHeight>, u64, u64), TransactionError> {
+        // Validate that token parameter is only used with transfer kinds
+        if let Some(tokens) = &tokens {
+            if !tokens.is_empty() {
+                let transfer_kinds = vec![
+                    TransactionKind::TransparentTransfer,
+                    TransactionKind::ShieldedTransfer,
+                    TransactionKind::ShieldingTransfer,
+                    TransactionKind::UnshieldingTransfer,
+                    TransactionKind::MixedTransfer,
+                    TransactionKind::IbcTransparentTransfer,
+                    TransactionKind::IbcShieldingTransfer,
+                    TransactionKind::IbcUnshieldingTransfer,
+                ];
+
+                if let Some(kinds) = &kinds {
+                    let non_transfer_kinds: Vec<_> = kinds
+                        .iter()
+                        .filter(|k| !transfer_kinds.contains(k))
+                        .collect();
+                    
+                    if !non_transfer_kinds.is_empty() {
+                        let valid_transfer_kinds = transfer_kinds
+                            .iter()
+                            .map(|k| format!("{:?}", k))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        
+                        return Err(TransactionError::InvalidTokenParameter(valid_transfer_kinds));
+                    }
+                } else {
+                    // No kind filter means "all kinds" which includes non-transfer kinds -> error
+                    let valid_transfer_kinds = transfer_kinds
+                        .iter()
+                        .map(|k| format!("{:?}", k))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    return Err(TransactionError::InvalidTokenParameter(valid_transfer_kinds));
+                }
+            }
+        }
+
         let kinds_db = kinds.map(|kinds| {
             kinds.into_iter().map(TransactionKindDb::from).collect()
         });
 
         let (transactions, total_pages, total_items) = self
             .transaction_repo
-            .find_recent_inner_txs(number, page as i64, kinds_db)
+            .find_recent_inner_txs(limit, page as i64, kinds_db, tokens)
             .await
             .map_err(TransactionError::Database)?;
 

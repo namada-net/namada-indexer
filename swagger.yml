@@ -1020,17 +1020,22 @@ paths:
             maximum: 10000
           description: Pagination parameter
         - in: query
-          name: number
+          name: limit
           schema:
             type: integer
             minimum: 1
-            maximum: 100
-          description: Number of transactions to return (default 10)
+            maximum: 10000
+          description: Optional limit on matching transactions to search for, breaking early when the limit is hit. If not specified, searches the entire dataset.
         - in: query
           name: kind
           schema:
             type: string
-          description: Comma-separated list of transaction kinds to filter by (e.g., "bond,withdraw,claimRewards"). If not specified, all transaction kinds are included.
+          description: Comma-separated list of transaction kinds to filter by (e.g., "bond,withdraw,claimRewards"). If not specified, no transaction kind filtering is applied.
+        - in: query
+          name: token
+          schema:
+            type: string
+          description: Comma-separated list of token addresses to filter by. Can only be used when filtering by transfer kinds only (e.g., "kind=shieldingTransfer,unshieldingTransfer"). If not specified, no token filtering is applied.
       responses:
         "200":
           description: Paginated list of recent inner transactions with block heights.

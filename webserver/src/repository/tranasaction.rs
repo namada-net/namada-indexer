@@ -47,9 +47,10 @@ pub trait TransactionRepositoryTrait {
     ) -> Result<Vec<WrapperTransactionDb>, String>;
     async fn find_recent_inner_txs(
         &self,
-        number: Option<u64>,
+        limit: Option<u64>,
         page: i64,
         kinds: Option<Vec<TransactionKindDb>>,
+        tokens: Option<Vec<String>>,
     ) -> Result<PaginatedResponseDb<(InnerTransactionDb, i32)>, String>;
 }
 
@@ -156,26 +157,75 @@ impl TransactionRepositoryTrait for TransactionRepository {
 
     async fn find_recent_inner_txs(
         &self,
-        number: Option<u64>,
+        limit: Option<u64>,
         page: i64,
         kinds: Option<Vec<TransactionKindDb>>,
+        tokens: Option<Vec<String>>,
     ) -> Result<PaginatedResponseDb<(InnerTransactionDb, i32)>, String> {
         let conn = self.app_state.get_db_connection().await;
-        let limit = number.unwrap_or(10) as i64;
 
         conn.interact(move |conn| {
             let mut query = inner_transactions::table
                 .inner_join(wrapper_transactions::table.on(inner_transactions::dsl::wrapper_id.eq(wrapper_transactions::dsl::id)))
                 .into_boxed();
 
-            // Filter by transaction kind if specified, otherwise default to return all kinds
+            // Filter by transaction kind if specified, otherwise return all kinds
             if let Some(kinds) = kinds {
                 query = query.filter(inner_transactions::dsl::kind.eq_any(kinds));
             }
 
+            // Filter by token if specified
+            if let Some(tokens) = tokens {
+                // For regular transfers: check sources and targets tokens
+                let _regular_transfer_kinds = vec![
+                    TransactionKindDb::TransparentTransfer,
+                    TransactionKindDb::ShieldedTransfer,
+                    TransactionKindDb::ShieldingTransfer,
+                    TransactionKindDb::UnshieldingTransfer,
+                    TransactionKindDb::MixedTransfer,
+                ];
+                
+                // For IBC transfers: check IBC token address
+                let _ibc_transfer_kinds = vec![
+                    TransactionKindDb::IbcTransparentTransfer,
+                    TransactionKindDb::IbcShieldingTransfer,
+                    TransactionKindDb::IbcUnshieldingTransfer,
+                ];
+
+                // Build token filter condition
+                let regular_kinds_str = "'transparent_transfer'::transaction_kind,
+                                          'shielded_transfer'::transaction_kind,
+                                          'shielding_transfer'::transaction_kind,
+                                          'unshielding_transfer'::transaction_kind,
+                                          'mixed_transfer'::transaction_kind";
+                let ibc_kinds_str = "'ibc_transparent_transfer'::transaction_kind,
+                                      'ibc_shielding_transfer'::transaction_kind,
+                                      'ibc_unshielding_transfer'::transaction_kind";
+
+                let tokens_str = tokens.iter()
+                    .map(|t| format!("'{}'", t))
+                    .collect::<Vec<_>>()
+                    .join(",");
+
+                // Wrap the OR group in extra parentheses to preserve AND/OR precedence with other filters
+                let token_filter = diesel::dsl::sql::<diesel::sql_types::Bool>(&format!(
+                    "((kind IN ({regular_kinds}) AND ((data::jsonb->'sources'->0->>'token') = ANY(ARRAY[{tokens}]) OR (data::jsonb->'targets'->0->>'token') = ANY(ARRAY[{tokens}])))
+                      OR (kind IN ({ibc_kinds}) AND (data::jsonb->0->'Ibc'->'address'->>'Account') = ANY(ARRAY[{tokens}])))",
+                    regular_kinds = regular_kinds_str,
+                    ibc_kinds = ibc_kinds_str,
+                    tokens = tokens_str
+                ));
+
+                query = query.filter(token_filter);
+            }
+
+            // Apply limit if specified to break early after reaching the requested number of matches 
+            if let Some(limit) = limit {
+                query = query.limit(limit as i64);
+            }
+
             query
                 .order(wrapper_transactions::dsl::block_height.desc())
-                .limit(limit)
                 .select((inner_transactions::all_columns, wrapper_transactions::dsl::block_height))
                 .paginate(page)
                 .load_and_count_pages::<(InnerTransactionDb, i32)>(conn)

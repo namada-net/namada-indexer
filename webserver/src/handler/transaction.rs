@@ -95,7 +95,7 @@ pub async fn get_recent_inner(
 
     let (transactions, total_pages, total_items) = state
         .transaction_service
-        .get_recent_inner(query.number, page, query.kind)
+        .get_recent_inner(query.limit, page, query.kind, query.token)
         .await?;
 
     let response =

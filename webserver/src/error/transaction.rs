@@ -14,6 +14,8 @@ pub enum TransactionError {
     Database(String),
     #[error("Rpc error: {0}")]
     Rpc(String),
+    #[error("Token parameter can only be used with transfer transaction kinds. Valid transfer kinds are: {0}")]
+    InvalidTokenParameter(String),
     #[error("Unknown error: {0}")]
     Unknown(String),
 }
@@ -23,6 +25,7 @@ impl IntoResponse for TransactionError {
         let status_code = match self {
             TransactionError::InvalidTxId => StatusCode::BAD_REQUEST,
             TransactionError::TxIdNotFound(_) => StatusCode::NOT_FOUND,
+            TransactionError::InvalidTokenParameter(_) => StatusCode::BAD_REQUEST,
             TransactionError::Unknown(_)
             | TransactionError::Database(_)
             | TransactionError::Rpc(_) => StatusCode::INTERNAL_SERVER_ERROR,
