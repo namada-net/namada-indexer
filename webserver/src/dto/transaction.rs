@@ -1,9 +1,10 @@
-use serde::{Deserialize, Serialize, de::value::StrDeserializer};
+use serde::de::value::StrDeserializer;
+use serde::{Deserialize, Serialize};
 use subtle_encoding::hex;
 use validator::Validate;
 
-use crate::error::transaction::TransactionError;
 use crate::entity::transaction::TransactionKind;
+use crate::error::transaction::TransactionError;
 
 #[derive(Clone, Serialize, Deserialize, Validate)]
 #[serde(rename_all = "camelCase")]
@@ -47,7 +48,8 @@ pub struct TransactionMostRecentQueryParams {
     pub token: Option<Vec<String>>,
 }
 
-// Parse the comma separated list of tx kinds from the query string into a vec of validated tx kinds
+// Parse the comma separated list of tx kinds from the query string into a vec
+// of validated tx kinds
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum KindList {
@@ -71,8 +73,12 @@ where
                 .filter(|p| !p.is_empty())
                 .map(|p| p.trim())
                 .map(|p| {
-                    let p = p.chars().next().map(|c| c.to_uppercase().collect::<String>())
-                        .unwrap_or_default() + &p[1..];
+                    let p = p
+                        .chars()
+                        .next()
+                        .map(|c| c.to_uppercase().collect::<String>())
+                        .unwrap_or_default()
+                        + &p[1..];
                     TransactionKind::deserialize(
                         StrDeserializer::<D::Error>::new(&p),
                     )
@@ -83,7 +89,8 @@ where
     }
 }
 
-// Parse the comma separated list of token addresses from the query string into a vec of strings
+// Parse the comma separated list of token addresses from the query string into
+// a vec of strings
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum TokenList {

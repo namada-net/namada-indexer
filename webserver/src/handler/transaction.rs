@@ -110,7 +110,8 @@ pub async fn get_most_recent_transactions(
     let filters_present = kind.is_some() || token.is_some();
 
     if !filters_present {
-        // If no filters are needed, we can just page over the wrapper tx table directly
+        // If no filters are needed, we can just page over the wrapper tx table
+        // directly
         let transactions = state
             .transaction_service
             .get_most_recent_transactions(offset, size)
@@ -140,13 +141,20 @@ pub async fn get_most_recent_transactions(
     }
 
     // Filtering by tx kind and/or transfer token:
-    // First, search for and return 'size' number of wrappers that have at least one inner tx matching the filters
+    // First, search for and return 'size' number of wrappers that have at least
+    // one inner tx matching the filters
     let candidates = state
         .transaction_service
-        .get_filtered_most_recent_wrappers(offset, size, kind.clone(), token.clone())
+        .get_filtered_most_recent_wrappers(
+            offset,
+            size,
+            kind.clone(),
+            token.clone(),
+        )
         .await?;
 
-    // Filter the corresponding inner txs to include only the matching inners in the response
+    // Filter the corresponding inner txs to include only the matching inners in
+    // the response
     let inner_futs = candidates
         .iter()
         .map(|tx| {
@@ -168,7 +176,9 @@ pub async fn get_most_recent_transactions(
                 inners.retain(|inner_tx| kind_filter.contains(&inner_tx.kind));
             }
             if let Some(ref token_filter) = token {
-                inners.retain(|inner_tx| filter_inner_tx_by_tokens(inner_tx, token_filter));
+                inners.retain(|inner_tx| {
+                    filter_inner_tx_by_tokens(inner_tx, token_filter)
+                });
             }
 
             if inners.is_empty() {
@@ -182,8 +192,12 @@ pub async fn get_most_recent_transactions(
     Ok(Json(response))
 }
 
-/// Filter a single inner transaction by token addresses involved (only applicable to transfer types)
-fn filter_inner_tx_by_tokens(inner_tx: &InnerTransaction, token_filter: &[String]) -> bool {
+/// Filter a single inner transaction by token addresses involved (only
+/// applicable to transfer types)
+fn filter_inner_tx_by_tokens(
+    inner_tx: &InnerTransaction,
+    token_filter: &[String],
+) -> bool {
     if token_filter.is_empty() {
         return true;
     }
@@ -232,7 +246,8 @@ fn filter_inner_tx_by_tokens(inner_tx: &InnerTransaction, token_filter: &[String
         return false;
     }
 
-    // Non-IBC transfers: check "sources" array containing entries with a "token" field
+    // Non-IBC transfers: check "sources" array containing entries with a
+    // "token" field
     if let Some(obj) = json_value.as_object() {
         if let Some(sources) = obj.get("sources").and_then(|v| v.as_array()) {
             for src in sources {

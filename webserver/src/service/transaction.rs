@@ -1,13 +1,12 @@
 use crate::appstate::AppState;
 use crate::entity::transaction::{
-    InnerTransaction, TransactionHistory, WrapperTransaction,
+    InnerTransaction, TransactionHistory, TransactionKind, WrapperTransaction,
 };
 use crate::error::transaction::TransactionError;
 use crate::repository::chain::{ChainRepository, ChainRepositoryTrait};
 use crate::repository::transaction::{
     TransactionRepository, TransactionRepositoryTrait,
 };
-use crate::entity::transaction::TransactionKind;
 
 #[derive(Clone)]
 pub struct TransactionService {
@@ -127,7 +126,12 @@ impl TransactionService {
 
         let txs = self
             .transaction_repo
-            .find_recent_matching_wrappers(offset as i64, size as i32, kinds, tokens)
+            .find_recent_matching_wrappers(
+                offset as i64,
+                size as i32,
+                kinds,
+                tokens,
+            )
             .await
             .map_err(TransactionError::Database)?;
 
