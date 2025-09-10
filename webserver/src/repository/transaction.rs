@@ -47,6 +47,7 @@ pub trait TransactionRepositoryTrait {
     ) -> Result<Vec<WrapperTransactionDb>, String>;
     async fn find_most_recent_transactions(
         &self,
+        offset: i64,
         size: i32,
     ) -> Result<Vec<WrapperTransactionDb>, String>;
 }
@@ -154,6 +155,7 @@ impl TransactionRepositoryTrait for TransactionRepository {
 
     async fn find_most_recent_transactions(
         &self,
+        offset: i64,
         size: i32,
     ) -> Result<Vec<WrapperTransactionDb>, String> {
         let conn = self.app_state.get_db_connection().await;
@@ -161,6 +163,7 @@ impl TransactionRepositoryTrait for TransactionRepository {
         conn.interact(move |conn| {
             wrapper_transactions::table
                 .order(wrapper_transactions::dsl::block_height.desc())
+                .offset(offset)
                 .limit(size as i64)
                 .select(WrapperTransactionDb::as_select())
                 .get_results(conn)

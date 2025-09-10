@@ -90,6 +90,7 @@ impl TransactionService {
 
     pub async fn get_most_recent_transactions(
         &self,
+        offset: u64,
         size: u64,
     ) -> Result<Vec<WrapperTransaction>, TransactionError> {
         let tokens = self
@@ -100,7 +101,7 @@ impl TransactionService {
 
         let txs = self
             .transaction_repo
-            .find_most_recent_transactions(size as i32)
+            .find_most_recent_transactions(offset as i64, size as i32)
             .await
             .map_err(TransactionError::Database)?;
 

@@ -5,8 +5,9 @@ use orm::transactions::{
 };
 use shared::id::Id;
 use shared::token::{IbcToken, Token};
+use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum TransactionKind {
     TransparentTransfer,
     ShieldedTransfer,
