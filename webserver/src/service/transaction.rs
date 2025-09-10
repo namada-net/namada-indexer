@@ -7,6 +7,7 @@ use crate::repository::chain::{ChainRepository, ChainRepositoryTrait};
 use crate::repository::transaction::{
     TransactionRepository, TransactionRepositoryTrait,
 };
+use crate::entity::transaction::TransactionKind;
 
 #[derive(Clone)]
 pub struct TransactionService {
@@ -108,6 +109,31 @@ impl TransactionService {
         Ok(txs
             .into_iter()
             .map(|w| WrapperTransaction::from_db(w, tokens.clone()))
+            .collect())
+    }
+
+    pub async fn get_filtered_most_recent_wrappers(
+        &self,
+        offset: u64,
+        size: u64,
+        kinds: Option<Vec<TransactionKind>>,
+        tokens: Option<Vec<String>>,
+    ) -> Result<Vec<WrapperTransaction>, TransactionError> {
+        let tokens_map = self
+            .chain_repo
+            .find_tokens()
+            .await
+            .map_err(TransactionError::Database)?;
+
+        let txs = self
+            .transaction_repo
+            .find_recent_matching_wrappers(offset as i64, size as i32, kinds, tokens)
+            .await
+            .map_err(TransactionError::Database)?;
+
+        Ok(txs
+            .into_iter()
+            .map(|w| WrapperTransaction::from_db(w, tokens_map.clone()))
             .collect())
     }
 }

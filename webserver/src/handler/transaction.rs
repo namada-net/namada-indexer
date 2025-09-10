@@ -107,12 +107,47 @@ pub async fn get_most_recent_transactions(
     let kind = query.kind;
     let token = query.token;
 
-    let transactions = state
+    let filters_present = kind.is_some() || token.is_some();
+
+    if !filters_present {
+        // If no filters are needed, we can just page over the wrapper tx table directly
+        let transactions = state
+            .transaction_service
+            .get_most_recent_transactions(offset, size)
+            .await?;
+
+        let inner_txs = transactions
+            .iter()
+            .map(|tx| {
+                state
+                    .transaction_service
+                    .get_inner_tx_by_wrapper_id(tx.id.to_string())
+            })
+            .collect::<Vec<_>>();
+
+        let inner_txs = futures::future::join_all(inner_txs).await;
+
+        let response = transactions
+            .into_iter()
+            .zip(inner_txs.into_iter())
+            .map(|(tx, inner_tx_result)| {
+                let inner_txs = inner_tx_result.unwrap_or_default();
+                WrapperTransactionResponse::new(tx, inner_txs)
+            })
+            .collect();
+
+        return Ok(Json(response));
+    }
+
+    // Filtering by tx kind and/or transfer token:
+    // First, search for and return 'size' number of wrappers that have at least one inner tx matching the filters
+    let candidates = state
         .transaction_service
-        .get_most_recent_transactions(offset, size)
+        .get_filtered_most_recent_wrappers(offset, size, kind.clone(), token.clone())
         .await?;
 
-    let inner_txs = transactions
+    // Filter the corresponding inner txs to include only the matching inners in the response
+    let inner_futs = candidates
         .iter()
         .map(|tx| {
             state
@@ -121,57 +156,36 @@ pub async fn get_most_recent_transactions(
         })
         .collect::<Vec<_>>();
 
-    let inner_txs = futures::future::join_all(inner_txs).await;
+    let inner_results = futures::future::join_all(inner_futs).await;
 
-    let response = transactions
+    let response = candidates
         .into_iter()
-        .zip(inner_txs.into_iter())
-        .filter_map(|(tx, inner_tx_result)| {
-            let mut inner_txs = inner_tx_result.unwrap_or_default();
+        .zip(inner_results.into_iter())
+        .filter_map(|(tx, inner_res)| {
+            let mut inners = inner_res.unwrap_or_default();
 
-            // Filter inner transactions based on query parameters
             if let Some(ref kind_filter) = kind {
-                inner_txs.retain(|inner_tx| kind_filter.contains(&inner_tx.kind));
+                inners.retain(|inner_tx| kind_filter.contains(&inner_tx.kind));
             }
-
             if let Some(ref token_filter) = token {
-                inner_txs.retain(|inner_tx| {
-                    filter_inner_tx_by_tokens(inner_tx, token_filter)
-                });
+                inners.retain(|inner_tx| filter_inner_tx_by_tokens(inner_tx, token_filter));
             }
 
-            if inner_txs.is_empty() {
+            if inners.is_empty() {
                 return None;
             }
 
-            Some(WrapperTransactionResponse::new(tx, inner_txs))
+            Some(WrapperTransactionResponse::new(tx, inners))
         })
-        .collect();
+        .collect::<Vec<_>>();
 
     Ok(Json(response))
 }
 
-/// Filter a single inner transaction by token addresses involved (only applies to transfer types)
+/// Filter a single inner transaction by token addresses involved (only applicable to transfer types)
 fn filter_inner_tx_by_tokens(inner_tx: &InnerTransaction, token_filter: &[String]) -> bool {
     if token_filter.is_empty() {
         return true;
-    }
-
-    // Apply token filter only for transfer-related kinds
-    let is_transfer_kind = matches!(
-        inner_tx.kind,
-        TransactionKind::TransparentTransfer
-            | TransactionKind::ShieldedTransfer
-            | TransactionKind::ShieldingTransfer
-            | TransactionKind::UnshieldingTransfer
-            | TransactionKind::IbcTransparentTransfer
-            | TransactionKind::IbcShieldingTransfer
-            | TransactionKind::IbcUnshieldingTransfer
-            | TransactionKind::MixedTransfer
-    );
-
-    if !is_transfer_kind {
-        return false;
     }
 
     let Some(data) = &inner_tx.data else {

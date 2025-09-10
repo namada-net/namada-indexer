@@ -878,6 +878,80 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WrapperTransaction"
+  /api/v1/chain/wrapper/recent:
+    get:
+      summary: Get the most recent wrapper transactions with optional filtering by inner tx kind and/or transfer token
+      parameters:
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1000000
+            default: 0
+          description: Number of matching wrappers to skip (for pagination)
+        - in: query
+          name: size
+          schema:
+            type: integer
+            minimum: 10
+            maximum: 30
+            default: 10
+          description: Number of matching wrappers to return
+        - in: query
+          name: kind
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - "transparentTransfer"
+                - "shieldedTransfer"
+                - "shieldingTransfer"
+                - "unshieldingTransfer"
+                - "mixedTransfer"
+                - "bond"
+                - "redelegation"
+                - "unbond"
+                - "withdraw"
+                - "claimRewards"
+                - "voteProposal"
+                - "initProposal"
+                - "changeMetadata"
+                - "changeCommission"
+                - "revealPk"
+                - "ibcMsgTransfer"
+                - "ibcTransparentTransfer"
+                - "ibcShieldingTransfer"
+                - "ibcUnshieldingTransfer"
+                - "becomeValidator"
+                - "deactivateValidator"
+                - "reactivateValidator"
+                - "unjailValidator"
+                - "changeConsensusKey"
+                - "initAccount"
+                - "unknown"
+          style: form
+          explode: false
+          description: Optionally, filter by inner-tx kind(s) (comma-separated).
+        - in: query
+          name: token
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: false
+          description: Optionally, filter by inner-tx transfer token(s) (comma-separated). Using this filter will exclude non-transfer inner-tx kinds from the results. 
+      responses:
+        "200":
+          description: List of wrapper transactions with filtered inner transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WrapperTransaction"
   /api/v1/chain/inner/{tx_id}:
     get:
       summary: Get the inner transaction by hash
