@@ -73,12 +73,6 @@ where
                 .filter(|p| !p.is_empty())
                 .map(|p| p.trim())
                 .map(|p| {
-                    let p = p
-                        .chars()
-                        .next()
-                        .map(|c| c.to_uppercase().collect::<String>())
-                        .unwrap_or_default()
-                        + &p[1..];
                     TransactionKind::deserialize(
                         StrDeserializer::<D::Error>::new(&p),
                     )
