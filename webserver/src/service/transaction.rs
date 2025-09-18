@@ -115,8 +115,8 @@ impl TransactionService {
         &self,
         offset: u64,
         size: u64,
-        kinds: Option<Vec<TransactionKind>>,
-        tokens: Option<Vec<String>>,
+        kinds: Vec<TransactionKind>,
+        tokens: Vec<String>,
     ) -> Result<Vec<WrapperTransaction>, TransactionError> {
         let tokens_map = self
             .chain_repo

@@ -1,4 +1,7 @@
 use async_trait::async_trait;
+use diesel::dsl::{exists, sql};
+use diesel::prelude::*;
+use diesel::sql_types::Text;
 use diesel::{
     ExpressionMethods, JoinOnDsl, QueryDsl, RunQueryDsl, SelectableHelper,
 };
@@ -6,7 +9,8 @@ use orm::schema::{
     inner_transactions, transaction_history, wrapper_transactions,
 };
 use orm::transactions::{
-    InnerTransactionDb, TransactionHistoryDb, WrapperTransactionDb,
+    InnerTransactionDb, TransactionHistoryDb, TransactionKindDb,
+    WrapperTransactionDb,
 };
 
 use super::utils::{Paginate, PaginatedResponseDb};
@@ -56,8 +60,8 @@ pub trait TransactionRepositoryTrait {
         &self,
         offset: i64,
         size: i32,
-        kinds: Option<Vec<TransactionKind>>,
-        tokens: Option<Vec<String>>,
+        kinds: Vec<TransactionKind>,
+        tokens: Vec<String>,
     ) -> Result<Vec<WrapperTransactionDb>, String>;
 }
 
@@ -186,159 +190,166 @@ impl TransactionRepositoryTrait for TransactionRepository {
         &self,
         offset: i64,
         size: i32,
-        kinds: Option<Vec<TransactionKind>>,
-        tokens: Option<Vec<String>>,
+        kinds: Vec<TransactionKind>,
+        tokens: Vec<String>,
     ) -> Result<Vec<WrapperTransactionDb>, String> {
         let conn = self.app_state.get_db_connection().await;
 
         conn.interact(move |conn| {
-            use diesel::dsl;
-            use diesel::prelude::*;
+            let mut outer =
+                wrapper_transactions::table.into_boxed::<diesel::pg::Pg>();
 
-            let mut query = wrapper_transactions::table.into_boxed();
-
-            let mut exists_clauses: Vec<String> = Vec::new();
-
-            // Kind filter
-            if let Some(kinds) = kinds {
-                if !kinds.is_empty() {
-                    fn kind_to_db(k: &TransactionKind) -> &'static str {
-                        match k {
-                            TransactionKind::TransparentTransfer => {
-                                "transparent_transfer"
-                            }
-                            TransactionKind::ShieldedTransfer => {
-                                "shielded_transfer"
-                            }
-                            TransactionKind::ShieldingTransfer => {
-                                "shielding_transfer"
-                            }
-                            TransactionKind::UnshieldingTransfer => {
-                                "unshielding_transfer"
-                            }
-                            TransactionKind::MixedTransfer => "mixed_transfer",
-                            TransactionKind::Bond => "bond",
-                            TransactionKind::Redelegation => "redelegation",
-                            TransactionKind::Unbond => "unbond",
-                            TransactionKind::Withdraw => "withdraw",
-                            TransactionKind::ClaimRewards => "claim_rewards",
-                            TransactionKind::VoteProposal => "vote_proposal",
-                            TransactionKind::InitProposal => "init_proposal",
-                            TransactionKind::ChangeMetadata => {
-                                "change_metadata"
-                            }
-                            TransactionKind::ChangeCommission => {
-                                "change_commission"
-                            }
-                            TransactionKind::RevealPk => "reveal_pk",
-                            TransactionKind::IbcMsgTransfer => {
-                                "ibc_msg_transfer"
-                            }
-                            TransactionKind::IbcTransparentTransfer => {
-                                "ibc_transparent_transfer"
-                            }
-                            TransactionKind::IbcShieldingTransfer => {
-                                "ibc_shielding_transfer"
-                            }
-                            TransactionKind::IbcUnshieldingTransfer => {
-                                "ibc_unshielding_transfer"
-                            }
-                            TransactionKind::BecomeValidator => {
-                                "become_validator"
-                            }
-                            TransactionKind::DeactivateValidator => {
-                                "deactivate_validator"
-                            }
-                            TransactionKind::ReactivateValidator => {
-                                "reactivate_validator"
-                            }
-                            TransactionKind::UnjailValidator => {
-                                "unjail_validator"
-                            }
-                            TransactionKind::ChangeConsensusKey => {
-                                "change_consensus_key"
-                            }
-                            TransactionKind::InitAccount => "init_account",
-                            TransactionKind::Unknown => "unknown",
+            // 1) Kind filter using typed enum mapping (apply as its own EXISTS)
+            if !kinds.is_empty() {
+                fn map_kind(k: &TransactionKind) -> TransactionKindDb {
+                    match k {
+                        TransactionKind::TransparentTransfer => {
+                            TransactionKindDb::TransparentTransfer
                         }
+                        TransactionKind::ShieldedTransfer => {
+                            TransactionKindDb::ShieldedTransfer
+                        }
+                        TransactionKind::ShieldingTransfer => {
+                            TransactionKindDb::ShieldingTransfer
+                        }
+                        TransactionKind::UnshieldingTransfer => {
+                            TransactionKindDb::UnshieldingTransfer
+                        }
+                        TransactionKind::MixedTransfer => {
+                            TransactionKindDb::MixedTransfer
+                        }
+                        TransactionKind::Bond => TransactionKindDb::Bond,
+                        TransactionKind::Redelegation => {
+                            TransactionKindDb::Redelegation
+                        }
+                        TransactionKind::Unbond => TransactionKindDb::Unbond,
+                        TransactionKind::Withdraw => {
+                            TransactionKindDb::Withdraw
+                        }
+                        TransactionKind::ClaimRewards => {
+                            TransactionKindDb::ClaimRewards
+                        }
+                        TransactionKind::VoteProposal => {
+                            TransactionKindDb::VoteProposal
+                        }
+                        TransactionKind::InitProposal => {
+                            TransactionKindDb::InitProposal
+                        }
+                        TransactionKind::ChangeMetadata => {
+                            TransactionKindDb::ChangeMetadata
+                        }
+                        TransactionKind::ChangeCommission => {
+                            TransactionKindDb::ChangeCommission
+                        }
+                        TransactionKind::RevealPk => {
+                            TransactionKindDb::RevealPk
+                        }
+                        TransactionKind::IbcMsgTransfer => {
+                            TransactionKindDb::IbcMsgTransfer
+                        }
+                        TransactionKind::IbcTransparentTransfer => {
+                            TransactionKindDb::IbcTransparentTransfer
+                        }
+                        TransactionKind::IbcShieldingTransfer => {
+                            TransactionKindDb::IbcShieldingTransfer
+                        }
+                        TransactionKind::IbcUnshieldingTransfer => {
+                            TransactionKindDb::IbcUnshieldingTransfer
+                        }
+                        TransactionKind::BecomeValidator => {
+                            TransactionKindDb::BecomeValidator
+                        }
+                        TransactionKind::DeactivateValidator => {
+                            TransactionKindDb::DeactivateValidator
+                        }
+                        TransactionKind::ReactivateValidator => {
+                            TransactionKindDb::ReactivateValidator
+                        }
+                        TransactionKind::UnjailValidator => {
+                            TransactionKindDb::UnjailValidator
+                        }
+                        TransactionKind::ChangeConsensusKey => {
+                            TransactionKindDb::ChangeConsensusKey
+                        }
+                        TransactionKind::InitAccount => {
+                            TransactionKindDb::InitAccount
+                        }
+                        TransactionKind::Unknown => TransactionKindDb::Unknown,
                     }
-
-                    let kinds_str = kinds
-                        .into_iter()
-                        .map(|k| {
-                            format!("'{}'::transaction_kind", kind_to_db(&k))
-                        })
-                        .collect::<Vec<_>>()
-                        .join(",");
-                    exists_clauses.push(format!(
-                        "inner_transactions.kind IN ({})",
-                        kinds_str
-                    ));
                 }
+
+                let kinds_db: Vec<TransactionKindDb> =
+                    kinds.iter().map(map_kind).collect();
+
+                let inner_by_kind = inner_transactions::table
+                    .filter(
+                        inner_transactions::dsl::wrapper_id
+                            .eq(wrapper_transactions::dsl::id),
+                    )
+                    .filter(inner_transactions::dsl::kind.eq_any(kinds_db));
+
+                outer = outer.filter(exists(inner_by_kind));
             }
 
-            // Token filters
-            if let Some(tokens) = tokens {
-                if !tokens.is_empty() {
-                    let tokens_str = tokens
-                        .into_iter()
-                        .map(|t| format!("'{}'", t))
-                        .collect::<Vec<_>>()
-                        .join(",");
+            // 2) Token filters via JSON path extraction (apply as its own
+            //    EXISTS)
+            if !tokens.is_empty() {
+                // regular transfer kinds (non-IBC)
+                let regular_kinds: Vec<TransactionKindDb> = vec![
+                    TransactionKindDb::TransparentTransfer,
+                    TransactionKindDb::ShieldedTransfer,
+                    TransactionKindDb::ShieldingTransfer,
+                    TransactionKindDb::UnshieldingTransfer,
+                    TransactionKindDb::MixedTransfer,
+                ];
 
-                    // IBC and non-IBC transfers have different 'data' json
-                    // structure, so the query will differ slighlty
+                // IBC transfer kinds
+                let ibc_kinds: Vec<TransactionKindDb> = vec![
+                    TransactionKindDb::IbcTransparentTransfer,
+                    TransactionKindDb::IbcShieldingTransfer,
+                    TransactionKindDb::IbcUnshieldingTransfer,
+                ];
 
-                    // Non-IBC transfer kinds
-                    let regular_kinds_str =
-                        "'transparent_transfer'::transaction_kind,
-                                              \
-                         'shielded_transfer'::transaction_kind,
-                                              \
-                         'shielding_transfer'::transaction_kind,
-                                              \
-                         'unshielding_transfer'::transaction_kind,
-                                              \
-                         'mixed_transfer'::transaction_kind";
-
-                    // IBC transfer kinds
-                    let ibc_kinds_str =
-                        "'ibc_transparent_transfer'::transaction_kind,
-                                          \
-                         'ibc_shielding_transfer'::transaction_kind,
-                                          \
-                         'ibc_unshielding_transfer'::transaction_kind";
-
-                    let token_predicate = format!(
-                        "((inner_transactions.kind IN ({regular_kinds}) AND \
-                         ((inner_transactions.data::jsonb->'sources'->0->>'\
-                         token') = ANY(ARRAY[{tokens}]) OR \
-                         (inner_transactions.data::jsonb->'targets'->0->>'\
-                         token') = ANY(ARRAY[{tokens}])))
-                          OR (inner_transactions.kind IN ({ibc_kinds}) AND \
-                         (inner_transactions.data::jsonb->0->'Ibc'->'address'\
-                         ->>'Account') = ANY(ARRAY[{tokens}])))",
-                        regular_kinds = regular_kinds_str,
-                        ibc_kinds = ibc_kinds_str,
-                        tokens = tokens_str,
-                    );
-                    exists_clauses.push(token_predicate);
-                }
-            }
-
-            if !exists_clauses.is_empty() {
-                let exists_sql = format!(
-                    "EXISTS (SELECT 1 FROM inner_transactions WHERE \
-                     inner_transactions.wrapper_id = wrapper_transactions.id \
-                     AND {} )",
-                    exists_clauses.join(" AND ")
+                // JSON path extracts coerced to non-null text
+                let sources_token = sql::<Text>(
+                    "COALESCE(inner_transactions.data::jsonb #>> \
+                     '{sources,0,token}', '')",
                 );
-                let exists_filter =
-                    dsl::sql::<diesel::sql_types::Bool>(&exists_sql);
-                query = query.filter(exists_filter);
+                let targets_token = sql::<Text>(
+                    "COALESCE(inner_transactions.data::jsonb #>> \
+                     '{targets,0,token}', '')",
+                );
+                let ibc_account = sql::<Text>(
+                    "COALESCE(inner_transactions.data::jsonb #>> \
+                     '{0,Ibc,address,Account}', '')",
+                );
+
+                // Build `(kind in regular) AND ((sources IN tokens) OR (targets
+                // IN tokens))`
+                let regular_filter = inner_transactions::dsl::kind
+                    .eq_any(regular_kinds.clone())
+                    .and(
+                        sources_token
+                            .eq_any(tokens.clone())
+                            .or(targets_token.eq_any(tokens.clone())),
+                    );
+
+                // Build `(kind in ibc_kinds) AND (ibc_account IN tokens)`
+                let ibc_filter = inner_transactions::dsl::kind
+                    .eq_any(ibc_kinds.clone())
+                    .and(ibc_account.eq_any(tokens));
+
+                let inner_by_token = inner_transactions::table
+                    .filter(
+                        inner_transactions::dsl::wrapper_id
+                            .eq(wrapper_transactions::dsl::id),
+                    )
+                    .filter(regular_filter.or(ibc_filter));
+
+                outer = outer.filter(exists(inner_by_token));
             }
 
-            query
+            outer
                 .order(wrapper_transactions::dsl::block_height.desc())
                 .offset(offset)
                 .limit(size as i64)

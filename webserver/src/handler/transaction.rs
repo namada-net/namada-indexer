@@ -107,7 +107,7 @@ pub async fn get_most_recent_transactions(
     let kind = query.kind;
     let token = query.token;
 
-    let filters_present = kind.is_some() || token.is_some();
+    let filters_present = !kind.is_empty() || !token.is_empty();
 
     if !filters_present {
         // If no filters are needed, we can just page over the wrapper tx table
@@ -172,12 +172,12 @@ pub async fn get_most_recent_transactions(
         .filter_map(|(tx, inner_res)| {
             let mut inners = inner_res.unwrap_or_default();
 
-            if let Some(ref kind_filter) = kind {
-                inners.retain(|inner_tx| kind_filter.contains(&inner_tx.kind));
+            if !kind.is_empty() {
+                inners.retain(|inner_tx| kind.contains(&inner_tx.kind));
             }
-            if let Some(ref token_filter) = token {
+            if !token.is_empty() {
                 inners.retain(|inner_tx| {
-                    filter_inner_tx_by_tokens(inner_tx, token_filter)
+                    filter_inner_tx_by_tokens(inner_tx, &token)
                 });
             }
 

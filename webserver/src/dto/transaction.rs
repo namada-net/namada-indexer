@@ -42,10 +42,10 @@ pub struct TransactionMostRecentQueryParams {
     pub offset: Option<u64>,
     #[validate(range(min = 10, max = 30))]
     pub size: Option<u64>,
-    #[serde(default, deserialize_with = "deserialize_kinds_opt")]
-    pub kind: Option<Vec<TransactionKind>>,
-    #[serde(default, deserialize_with = "deserialize_tokens_opt")]
-    pub token: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_kinds_vec")]
+    pub kind: Vec<TransactionKind>,
+    #[serde(default, deserialize_with = "deserialize_tokens_vec")]
+    pub token: Vec<String>,
 }
 
 // Parse the comma separated list of tx kinds from the query string into a vec
@@ -57,30 +57,28 @@ enum KindList {
     Csv(String),
 }
 
-fn deserialize_kinds_opt<'de, D>(
+fn deserialize_kinds_vec<'de, D>(
     deserializer: D,
-) -> Result<Option<Vec<TransactionKind>>, D::Error>
+) -> Result<Vec<TransactionKind>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let opt = Option::<KindList>::deserialize(deserializer)?;
-    match opt {
-        None => Ok(None),
-        Some(KindList::List(v)) => Ok(Some(v)),
-        Some(KindList::Csv(s)) => {
-            let kinds: Result<Vec<_>, D::Error> = s
-                .split(',')
-                .filter(|p| !p.is_empty())
-                .map(|p| p.trim())
-                .map(|p| {
-                    TransactionKind::deserialize(
-                        StrDeserializer::<D::Error>::new(&p),
-                    )
-                })
-                .collect();
-            kinds.map(Some)
-        }
-    }
+    let vec = match opt {
+        None => Vec::new(),
+        Some(KindList::List(v)) => v,
+        Some(KindList::Csv(s)) => s
+            .split(',')
+            .filter(|p| !p.is_empty())
+            .map(|p| p.trim())
+            .map(|p| {
+                TransactionKind::deserialize(StrDeserializer::<D::Error>::new(
+                    &p,
+                ))
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    };
+    Ok(vec)
 }
 
 // Parse the comma separated list of token addresses from the query string into
@@ -92,23 +90,21 @@ enum TokenList {
     Csv(String),
 }
 
-fn deserialize_tokens_opt<'de, D>(
+fn deserialize_tokens_vec<'de, D>(
     deserializer: D,
-) -> Result<Option<Vec<String>>, D::Error>
+) -> Result<Vec<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let opt = Option::<TokenList>::deserialize(deserializer)?;
-    match opt {
-        None => Ok(None),
-        Some(TokenList::List(v)) => Ok(Some(v)),
-        Some(TokenList::Csv(s)) => {
-            let tokens: Vec<String> = s
-                .split(',')
-                .filter(|p| !p.is_empty())
-                .map(|p| p.trim().to_string())
-                .collect();
-            Ok(Some(tokens))
-        }
-    }
+    let vec = match opt {
+        None => Vec::new(),
+        Some(TokenList::List(v)) => v,
+        Some(TokenList::Csv(s)) => s
+            .split(',')
+            .filter(|p| !p.is_empty())
+            .map(|p| p.trim().to_string())
+            .collect(),
+    };
+    Ok(vec)
 }

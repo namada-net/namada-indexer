@@ -8,7 +8,7 @@ use shared::id::Id;
 use shared::token::{IbcToken, Token};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")] 
+#[serde(rename_all = "camelCase")]
 pub enum TransactionKind {
     TransparentTransfer,
     ShieldedTransfer,
