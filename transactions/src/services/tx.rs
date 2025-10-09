@@ -12,7 +12,7 @@ use shared::transaction::{
 pub fn get_ibc_token_flows(
     block_results: &BlockResult,
 ) -> impl Iterator<Item = (IbcTokenAction, String, BigDecimal)> + use<'_> {
-    block_results.finalize_events.iter().filter_map(|event| {
+    block_results.end_events.iter().filter_map(|event| {
         let (action, original_packet, fungible_token_packet) =
             event.attributes.as_ref()?.as_fungible_token_packet()?;
 
@@ -59,7 +59,7 @@ pub fn get_ibc_packets(
     );
 
     block_results
-        .finalize_events
+        .end_events
         .iter()
         .filter_map(|event| {
             if let Some(attributes) = &event.attributes {

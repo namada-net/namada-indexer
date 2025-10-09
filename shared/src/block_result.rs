@@ -54,7 +54,7 @@ impl From<&String> for EventKind {
 pub struct BlockResult {
     pub height: u64,
     pub begin_events: Vec<Event>,
-    pub finalize_events: Vec<Event>,
+    pub end_events: Vec<Event>,
 }
 
 #[derive(Debug, Clone)]
@@ -412,51 +412,44 @@ impl TxAttributesType {
 
 impl From<TendermintBlockResultResponse> for BlockResult {
     fn from(value: TendermintBlockResultResponse) -> Self {
+        fn cast_event(event: &tendermint::abci::Event) -> Event {
+            let kind = EventKind::from(&event.kind);
+            let raw_attributes = event.attributes.iter().fold(
+                BTreeMap::default(),
+                |mut acc, attribute| {
+                    acc.insert(
+                        String::from(attribute.key_str().unwrap()),
+                        String::from(attribute.value_str().unwrap()),
+                    );
+                    acc
+                },
+            );
+            let attributes =
+                TxAttributesType::deserialize(&kind, &raw_attributes);
+            Event { kind, attributes }
+        }
+
         let begin_events = value
             .begin_block_events
             .unwrap_or_default()
             .iter()
-            .map(|event| {
-                let kind = EventKind::from(&event.kind);
-                let raw_attributes = event.attributes.iter().fold(
-                    BTreeMap::default(),
-                    |mut acc, attribute| {
-                        acc.insert(
-                            String::from(attribute.key_str().unwrap()),
-                            String::from(attribute.value_str().unwrap()),
-                        );
-                        acc
-                    },
-                );
-                let attributes =
-                    TxAttributesType::deserialize(&kind, &raw_attributes);
-                Event { kind, attributes }
-            })
+            .map(cast_event)
             .collect::<Vec<Event>>();
-        let finalize_events = value
-            .finalize_block_events
+        // NOTE: starting with comet v0.38, end events are only avialable from
+        // the `finalize_block_events` field. For backward-compatibility
+        // reasons we still evaluate the `end_block_events` field as
+        // well and merge the two outputs
+        let end_events = value
+            .end_block_events
+            .unwrap_or_default()
             .iter()
-            .map(|event| {
-                let kind = EventKind::from(&event.kind);
-                let raw_attributes = event.attributes.iter().fold(
-                    BTreeMap::default(),
-                    |mut acc, attribute| {
-                        acc.insert(
-                            String::from(attribute.key_str().unwrap()),
-                            String::from(attribute.value_str().unwrap()),
-                        );
-                        acc
-                    },
-                );
-                let attributes =
-                    TxAttributesType::deserialize(&kind, &raw_attributes);
-                Event { kind, attributes }
-            })
+            .map(cast_event)
+            .chain(value.finalize_block_events.iter().map(cast_event))
             .collect::<Vec<Event>>();
         Self {
             height: value.height.value(),
             begin_events,
-            finalize_events,
+            end_events,
         }
     }
 }
@@ -470,7 +463,7 @@ impl From<&TendermintBlockResultResponse> for BlockResult {
 impl BlockResult {
     pub fn is_wrapper_tx_applied(&self, tx_hash: &Id) -> TransactionExitStatus {
         let exit_status = self
-            .finalize_events
+            .end_events
             .iter()
             .filter_map(|event| {
                 if let Some(TxAttributesType::TxApplied(data)) =
@@ -489,7 +482,7 @@ impl BlockResult {
     }
 
     pub fn gas_used(&self, tx_hash: &Id) -> Option<String> {
-        self.finalize_events
+        self.end_events
             .iter()
             .filter_map(|event| {
                 if let Some(TxAttributesType::TxApplied(data)) =
@@ -510,7 +503,7 @@ impl BlockResult {
         inner_hash: &Id,
     ) -> TransactionExitStatus {
         let exit_status = self
-            .finalize_events
+            .end_events
             .iter()
             .filter_map(|event| {
                 if let Some(TxAttributesType::TxApplied(data)) =
@@ -531,7 +524,7 @@ impl BlockResult {
     }
 
     pub fn masp_ref(&self, indexed_tx: &IndexedTx) -> Option<(MaspRef, bool)> {
-        self.finalize_events
+        self.end_events
             .iter()
             .find_map(|event| match event.kind {
                 EventKind::MaspFeePayment => {
