@@ -54,7 +54,7 @@ impl From<&String> for EventKind {
 pub struct BlockResult {
     pub height: u64,
     pub begin_events: Vec<Event>,
-    pub end_events: Vec<Event>,
+    pub finalize_events: Vec<Event>,
 }
 
 #[derive(Debug, Clone)]
@@ -433,9 +433,8 @@ impl From<TendermintBlockResultResponse> for BlockResult {
                 Event { kind, attributes }
             })
             .collect::<Vec<Event>>();
-        let end_events = value
-            .end_block_events
-            .unwrap_or_default()
+        let finalize_events = value
+            .finalize_block_events
             .iter()
             .map(|event| {
                 let kind = EventKind::from(&event.kind);
@@ -457,7 +456,7 @@ impl From<TendermintBlockResultResponse> for BlockResult {
         Self {
             height: value.height.value(),
             begin_events,
-            end_events,
+            finalize_events,
         }
     }
 }
@@ -471,7 +470,7 @@ impl From<&TendermintBlockResultResponse> for BlockResult {
 impl BlockResult {
     pub fn is_wrapper_tx_applied(&self, tx_hash: &Id) -> TransactionExitStatus {
         let exit_status = self
-            .end_events
+            .finalize_events
             .iter()
             .filter_map(|event| {
                 if let Some(TxAttributesType::TxApplied(data)) =
@@ -490,7 +489,7 @@ impl BlockResult {
     }
 
     pub fn gas_used(&self, tx_hash: &Id) -> Option<String> {
-        self.end_events
+        self.finalize_events
             .iter()
             .filter_map(|event| {
                 if let Some(TxAttributesType::TxApplied(data)) =
@@ -511,7 +510,7 @@ impl BlockResult {
         inner_hash: &Id,
     ) -> TransactionExitStatus {
         let exit_status = self
-            .end_events
+            .finalize_events
             .iter()
             .filter_map(|event| {
                 if let Some(TxAttributesType::TxApplied(data)) =
@@ -532,7 +531,7 @@ impl BlockResult {
     }
 
     pub fn masp_ref(&self, indexed_tx: &IndexedTx) -> Option<(MaspRef, bool)> {
-        self.end_events
+        self.finalize_events
             .iter()
             .find_map(|event| match event.kind {
                 EventKind::MaspFeePayment => {
