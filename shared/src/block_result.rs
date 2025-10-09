@@ -435,10 +435,10 @@ impl From<TendermintBlockResultResponse> for BlockResult {
             .iter()
             .map(cast_event)
             .collect::<Vec<Event>>();
-        // NOTE: starting with comet v0.38, end events are only avialable from
+        // NOTE: starting with comet v0.38, end events are only available from
         // the `finalize_block_events` field. For backward-compatibility
-        // reasons we still evaluate the `end_block_events` field as
-        // well and merge the two outputs
+        // reasons we still evaluate `end_block_events` as well and merge the
+        // two outputs
         let end_events = value
             .end_block_events
             .unwrap_or_default()
