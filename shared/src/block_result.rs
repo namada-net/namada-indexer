@@ -412,47 +412,39 @@ impl TxAttributesType {
 
 impl From<TendermintBlockResultResponse> for BlockResult {
     fn from(value: TendermintBlockResultResponse) -> Self {
+        fn cast_event(event: &tendermint::abci::Event) -> Event {
+            let kind = EventKind::from(&event.kind);
+            let raw_attributes = event.attributes.iter().fold(
+                BTreeMap::default(),
+                |mut acc, attribute| {
+                    acc.insert(
+                        String::from(attribute.key_str().unwrap()),
+                        String::from(attribute.value_str().unwrap()),
+                    );
+                    acc
+                },
+            );
+            let attributes =
+                TxAttributesType::deserialize(&kind, &raw_attributes);
+            Event { kind, attributes }
+        }
+
         let begin_events = value
             .begin_block_events
             .unwrap_or_default()
             .iter()
-            .map(|event| {
-                let kind = EventKind::from(&event.kind);
-                let raw_attributes = event.attributes.iter().fold(
-                    BTreeMap::default(),
-                    |mut acc, attribute| {
-                        acc.insert(
-                            String::from(attribute.key_str().unwrap()),
-                            String::from(attribute.value_str().unwrap()),
-                        );
-                        acc
-                    },
-                );
-                let attributes =
-                    TxAttributesType::deserialize(&kind, &raw_attributes);
-                Event { kind, attributes }
-            })
+            .map(cast_event)
             .collect::<Vec<Event>>();
+        // NOTE: starting with comet v0.38, end events are only available from
+        // the `finalize_block_events` field. For backward-compatibility
+        // reasons we still evaluate `end_block_events` as well and merge the
+        // two outputs
         let end_events = value
             .end_block_events
             .unwrap_or_default()
             .iter()
-            .map(|event| {
-                let kind = EventKind::from(&event.kind);
-                let raw_attributes = event.attributes.iter().fold(
-                    BTreeMap::default(),
-                    |mut acc, attribute| {
-                        acc.insert(
-                            String::from(attribute.key_str().unwrap()),
-                            String::from(attribute.value_str().unwrap()),
-                        );
-                        acc
-                    },
-                );
-                let attributes =
-                    TxAttributesType::deserialize(&kind, &raw_attributes);
-                Event { kind, attributes }
-            })
+            .map(cast_event)
+            .chain(value.finalize_block_events.iter().map(cast_event))
             .collect::<Vec<Event>>();
         Self {
             height: value.height.value(),
