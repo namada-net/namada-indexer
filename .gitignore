@@ -89,3 +89,4 @@ swagger-codegen.json
 # Ignore docker compose override files
 docker-compose.override*
 overrides
+k6/summary.html
