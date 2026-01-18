@@ -53,19 +53,19 @@ futures = "0.3.30"
 futures-core = "0.3.30"
 futures-util = "0.3.30"
 lazy_static = "1.4.0"
-namada_core = { version = "0.149.1" }
-namada_events = { version = "0.149.1" }
-namada_governance = { version = "0.149.1" }
-namada_ibc = { version = "0.149.1" }
-namada_parameters = { version = "0.149.1" }
-namada_proof_of_stake = { version = "0.149.1" }
-namada_sdk = { version = "0.149.1", default-features = false, features = [
+namada_core = { version = "0.150.2" }
+namada_events = { version = "0.150.2" }
+namada_governance = { version = "0.150.2" }
+namada_ibc = { version = "0.150.2" }
+namada_parameters = { version = "0.150.2" }
+namada_proof_of_stake = { version = "0.150.2" }
+namada_sdk = { version = "0.150.2", default-features = false, features = [
   "std",
   "async-send",
   "download-params",
 ] }
-namada_token = { version = "0.149.1" }
-namada_tx = { version = "0.149.1" }
+namada_token = { version = "0.150.2" }
+namada_tx = { version = "0.150.2" }
 num-bigint = "0.4.6"
 orm = { path = "orm" }
 rand = "0.8.5"
