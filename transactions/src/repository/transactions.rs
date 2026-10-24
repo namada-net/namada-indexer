@@ -119,8 +119,9 @@ pub fn insert_ibc_sequence(
                 .map(IbcAckInsertDb::from)
                 .collect(),
         )
+        .on_conflict_do_nothing()
         .execute(transaction_conn)
-        .context("Failed to update crawler state in db")?;
+        .context("Failed to insert ibc sequence in db")?;
 
     anyhow::Ok(())
 }

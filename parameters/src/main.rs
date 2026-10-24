@@ -85,7 +85,9 @@ async fn crawling_fn(
         .await
         .into_rpc_error()?;
 
-    let checksums = namada_service::query_checksums(&client).await;
+    let checksums = namada_service::query_checksums(&client)
+        .await
+        .into_rpc_error()?;
 
     let gas_price = namada_service::get_gas_price(&client).await;
 

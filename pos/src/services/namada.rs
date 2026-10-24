@@ -85,7 +85,7 @@ pub async fn get_validator_set_at_epoch(
                 state: validator_state
             })
         })
-        .buffer_unordered(32)
+        .buffer_unordered(shared::utils::rpc_concurrency())
         .try_collect::<HashSet<_>>()
         .await?;
 
@@ -143,7 +143,7 @@ pub async fn get_validators_state(
 
             anyhow::Ok(validator)
         })
-        .buffer_unordered(32)
+        .buffer_unordered(shared::utils::rpc_concurrency())
         .try_collect::<HashSet<_>>()
         .await?;
 

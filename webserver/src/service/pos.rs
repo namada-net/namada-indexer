@@ -319,19 +319,12 @@ impl PosService {
             .await
             .map_err(PoSError::Database)?;
 
-        let mut rewards = vec![];
-        for (db_reward, db_validator) in db_rewards {
-            let db_validator =
-                self.pos_repo.find_validator_by_id(db_validator.id).await;
-            if let Ok(Some(db_validator)) = db_validator {
-                rewards.push(Reward::from(db_reward.clone(), db_validator));
-            } else {
-                tracing::error!(
-                    "Couldn't find validator with id {} in bond query",
-                    db_reward.validator_id
-                );
-            }
-        }
+        let rewards = db_rewards
+            .into_iter()
+            .map(|(db_reward, db_validator)| {
+                Reward::from(db_reward, db_validator)
+            })
+            .collect();
 
         Ok(rewards)
     }

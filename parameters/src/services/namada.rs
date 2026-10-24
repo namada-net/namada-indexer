@@ -24,35 +24,33 @@ use tendermint_rpc::HttpClient;
 async fn query_tx_code_hash(
     client: &HttpClient,
     tx_code_path: &str,
-) -> Option<String> {
+) -> anyhow::Result<Option<String>> {
     let hash_key = Key::wasm_hash(tx_code_path);
     let (tx_code_res, _) =
-        rpc::query_storage_value_bytes(client, &hash_key, None, false)
-            .await
-            .ok()?;
+        rpc::query_storage_value_bytes(client, &hash_key, None, false).await?;
     if let Some(tx_code_bytes) = tx_code_res {
         let tx_code =
             Hash::try_from(&tx_code_bytes[..]).expect("Invalid code hash");
-        Some(tx_code.to_string())
+        Ok(Some(tx_code.to_string()))
     } else {
-        None
+        Ok(None)
     }
 }
 
-pub async fn query_checksums(client: &HttpClient) -> Checksums {
+pub async fn query_checksums(client: &HttpClient) -> anyhow::Result<Checksums> {
     let mut checksums = Checksums::default();
     for code_path in Checksums::code_paths() {
-        let code =
-            query_tx_code_hash(client, &code_path)
-                .await
-                .unwrap_or_else(|| {
-                    panic!("{} must be defined in namada storage.", code_path)
-                });
+        let code = query_tx_code_hash(client, &code_path)
+            .await
+            .with_context(|| format!("Failed to query {} hash", code_path))?
+            .with_context(|| {
+                format!("{} must be defined in namada storage.", code_path)
+            })?;
 
         checksums.add_with_ext(code_path, code.to_lowercase());
     }
 
-    checksums
+    Ok(checksums)
 }
 
 pub async fn get_parameters(client: &HttpClient) -> anyhow::Result<Parameters> {

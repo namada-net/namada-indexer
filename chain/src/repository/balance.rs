@@ -1,5 +1,6 @@
 use anyhow::Context;
-use diesel::{PgConnection, RunQueryDsl};
+use diesel::upsert::excluded;
+use diesel::{ExpressionMethods, PgConnection, RunQueryDsl};
 use orm::balances::BalanceChangesInsertDb;
 use orm::ibc::IbcRateLimitsInsertDb;
 use orm::schema::{
@@ -95,7 +96,17 @@ where
 
     diesel::insert_into(token_supplies_per_epoch::table)
         .values(supplies)
-        .on_conflict_do_nothing()
+        .on_conflict((
+            token_supplies_per_epoch::columns::address,
+            token_supplies_per_epoch::columns::epoch,
+        ))
+        .do_update()
+        .set((
+            token_supplies_per_epoch::columns::total
+                .eq(excluded(token_supplies_per_epoch::columns::total)),
+            token_supplies_per_epoch::columns::effective
+                .eq(excluded(token_supplies_per_epoch::columns::effective)),
+        ))
         .execute(transaction_conn)
         .context("Failed to update token supplies in db")?;
 

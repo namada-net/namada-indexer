@@ -1204,8 +1204,8 @@ impl Block {
                         avatar,
                     })
                 }
-                TransactionKind::CommissionChange(data) => {
-                    let commission_change = data.clone().unwrap();
+                TransactionKind::CommissionChange(Some(commission_change)) => {
+                    let commission_change = commission_change.clone();
 
                     let source_address = commission_change.validator;
 

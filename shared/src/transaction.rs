@@ -429,6 +429,9 @@ impl Transaction {
         match transaction.header().tx_type {
             TxType::Wrapper(wrapper) => {
                 let wrapper_tx_id = Id::from(transaction.header_hash());
+                let wrapper_tx_status =
+                    block_results.is_wrapper_tx_applied(&wrapper_tx_id);
+                let atomic = transaction.header().atomic;
                 let mut masp_fee_payment = None;
                 let mut inner_txs = vec![];
 
@@ -564,6 +567,17 @@ impl Transaction {
                         masp_fee_payment = Some(inner_tx_id.clone());
                     }
 
+                    let effective_exit_code = if inner_tx_status
+                        == TransactionExitStatus::Applied
+                        && (wrapper_tx_status == TransactionExitStatus::Applied
+                            || masp_fee_payment_ref
+                            || !atomic)
+                    {
+                        TransactionExitStatus::Applied
+                    } else {
+                        TransactionExitStatus::Rejected
+                    };
+
                     let inner_tx = InnerTransaction {
                         tx_id: inner_tx_id,
                         index: batch_index,
@@ -572,19 +586,16 @@ impl Transaction {
                         data: encoded_tx_data,
                         extra_sections,
                         notes,
-                        exit_code: inner_tx_status,
+                        exit_code: effective_exit_code,
                         kind: tx_kind,
                     };
 
                     inner_txs.push(inner_tx);
                 }
 
-                let wrapper_tx_status =
-                    block_results.is_wrapper_tx_applied(&wrapper_tx_id);
                 let gas_used = block_results
                     .gas_used(&wrapper_tx_id)
                     .map(|gas| gas.parse::<u64>().unwrap());
-                let atomic = transaction.header().atomic;
 
                 let fee = Fee {
                     gas: Uint::from(wrapper.gas_limit).to_string(),

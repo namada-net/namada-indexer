@@ -62,8 +62,9 @@ async fn main() -> Result<(), MainError> {
 
     tracing::info!("Network chain id: {}", chain_id);
 
-    let checksums =
-        Arc::new(Mutex::new(query_checksums(client.as_ref()).await));
+    let checksums = Arc::new(Mutex::new(
+        query_checksums(client.as_ref()).await.into_rpc_error()?,
+    ));
 
     config.log.init();
 
@@ -269,7 +270,9 @@ async fn crawling_fn(
     // For new epochs, we need to query checksums in case they were changed due
     // to proposal
     if new_epoch {
-        *checksums = namada_service::query_checksums(&client).await;
+        *checksums = namada_service::query_checksums(&client)
+            .await
+            .into_rpc_error()?;
     }
 
     let native_token = namada_service::get_native_token(&client)
@@ -317,7 +320,7 @@ async fn crawling_fn(
         block.transactions.len()
     );
 
-    let ibc_tokens = block
+    let mut ibc_tokens = block
         .ibc_tokens()
         .into_iter()
         .map(Token::Ibc)
@@ -329,10 +332,18 @@ async fn crawling_fn(
         ));
     let addresses =
         block.addresses_with_balance_change(&native_token, &ibc_tokens);
-    let all_changed_tokens_supply = addresses
+    let mut all_changed_tokens_supply = addresses
         .iter()
         .map(|bc| bc.token.clone())
         .collect::<HashSet<_>>();
+
+    if new_epoch {
+        let tokens = query_tokens(&client).await.into_rpc_error()?;
+        all_changed_tokens_supply.extend(tokens.iter().cloned());
+        // Supplies of all tokens are stored on epoch change, so every token
+        // must exist in the `token` table to satisfy the foreign key
+        ibc_tokens.extend(tokens);
+    }
 
     let token_supplies =
         query_token_supplies(&client, &all_changed_tokens_supply, epoch)
@@ -946,7 +957,7 @@ async fn query_token_supplies(
                 }
             }
         })
-        .buffer_unordered(32);
+        .buffer_unordered(shared::utils::rpc_concurrency());
 
     while let Some(maybe_supply) = stream.next().await {
         let supply = maybe_supply?;

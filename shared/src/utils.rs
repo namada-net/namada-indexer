@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
 use anyhow::Context;
 use namada_ibc::apps::nft_transfer::types::PORT_ID_STR as NFT_PORT_ID_STR;
@@ -18,6 +19,21 @@ use namada_sdk::token::Transfer;
 use crate::id::Id;
 use crate::ser::{self, ChainAddress, TransferData};
 use crate::token::Token;
+
+/// Upper bound on concurrent RPC requests when a query fans out (e.g. one
+/// request per validator or address). Read once from `RPC_CONCURRENCY`;
+/// defaults to 32. Lower it for rate-limited public RPCs, raise it for a
+/// dedicated node.
+pub fn rpc_concurrency() -> usize {
+    static CONCURRENCY: OnceLock<usize> = OnceLock::new();
+    *CONCURRENCY.get_or_init(|| {
+        std::env::var("RPC_CONCURRENCY")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(32)
+    })
+}
 use crate::transaction::TransactionKind;
 
 pub(crate) const MASP_ADDRESS: Address =

@@ -210,30 +210,34 @@ pub fn remove_withdraws(
     current_epoch: Epoch,
     unbond_addresses: HashSet<UnbondAddresses>,
 ) -> anyhow::Result<()> {
-    let sources = unbond_addresses
-        .iter()
-        .map(|unbond| unbond.source.to_string())
-        .collect::<Vec<String>>();
+    // If there are no withdraws to remove, return early.
+    if unbond_addresses.is_empty() {
+        return Ok(());
+    }
 
-    let validators = unbond_addresses
-        .iter()
-        .map(|unbond| unbond.validator.to_string())
-        .collect::<Vec<String>>();
+    let mut query = diesel::delete(unbonds::table).into_boxed();
 
-    diesel::delete(
-        unbonds::table.filter(
+    for unbond in unbond_addresses {
+        query = query.or_filter(
             unbonds::columns::address
-                .eq_any(sources)
-                .and(unbonds::columns::validator_id.eq_any(
-                    validators::table.select(validators::columns::id).filter(
-                        validators::columns::namada_address.eq_any(validators),
+                .eq(unbond.source.to_string())
+                .and(
+                    unbonds::columns::validator_id.eq_any(
+                        validators::table
+                            .select(validators::columns::id)
+                            .filter(
+                                validators::columns::namada_address
+                                    .eq(unbond.validator.to_string()),
+                            ),
                     ),
-                ))
+                )
                 .and(unbonds::columns::withdraw_epoch.le(current_epoch as i32)),
-        ),
-    )
-    .execute(transaction_conn)
-    .context("Failed to remove withdraws from db")?;
+        );
+    }
+
+    query
+        .execute(transaction_conn)
+        .context("Failed to remove withdraws from db")?;
 
     anyhow::Ok(())
 }
@@ -489,6 +493,64 @@ mod tests {
 
             assert_eq!(queried_bonds.len(), 3);
             // TODO: later compare whole bonds
+
+            anyhow::Ok(())
+        })
+        .await
+        .expect("Failed to run test");
+    }
+
+    /// Test that remove_withdraws only deletes the exact (source, validator)
+    /// pairs and not the Cartesian product when multiple users withdraw from
+    /// different validators in the same block.
+    #[tokio::test]
+    async fn test_remove_withdraws_only_deletes_matching_pairs() {
+        let db = TestDb::new();
+
+        db.run_test(|conn| {
+            let validator1 = Validator::fake();
+            let validator2 = Validator::fake();
+
+            let mut unbond_a_v1 = Unbond::fake(validator1.address.clone());
+            unbond_a_v1.withdraw_at = 5;
+
+            let mut unbond_a_v2 = Unbond::fake(validator2.address.clone());
+            unbond_a_v2.source = unbond_a_v1.source.clone();
+            unbond_a_v2.withdraw_at = 5;
+
+            let mut unbond_b_v2 = Unbond::fake(validator2.address.clone());
+            unbond_b_v2.withdraw_at = 5;
+
+            let mut unbond_b_v1 = Unbond::fake(validator1.address.clone());
+            unbond_b_v1.source = unbond_b_v2.source.clone();
+            unbond_b_v1.withdraw_at = 5;
+
+            seed_unbonds(
+                conn,
+                validator1.clone(),
+                vec![unbond_a_v1.clone(), unbond_b_v1.clone()],
+            )?;
+            seed_unbonds(
+                conn,
+                validator2.clone(),
+                vec![unbond_a_v2.clone(), unbond_b_v2.clone()],
+            )?;
+
+            let withdraws = HashSet::from([
+                UnbondAddresses {
+                    source: unbond_a_v1.source.clone(),
+                    validator: validator1.address.clone(),
+                },
+                UnbondAddresses {
+                    source: unbond_b_v2.source.clone(),
+                    validator: validator2.address.clone(),
+                },
+            ]);
+
+            remove_withdraws(conn, 10, withdraws)?;
+
+            let remaining = query_unbonds(conn);
+            assert_eq!(remaining.len(), 2);
 
             anyhow::Ok(())
         })

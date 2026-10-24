@@ -41,17 +41,17 @@ pub async fn chain_status(
                 .chain_service
                 .find_last_processed_block()
                 .await
-                .expect("Failed to get last processed block");
+                .unwrap_or_default();
 
             let epoch = state
                 .chain_service
                 .find_last_processed_epoch()
                 .await
-                .expect("Failed to get last processed epoch");
+                .unwrap_or_default();
 
             let event =
                 serde_json::to_string(&ChainStatusEvent { height, epoch })
-                    .expect("Failed to serialize event");
+                    .unwrap_or_default();
 
             Ok(Event::default().data(event))
         }

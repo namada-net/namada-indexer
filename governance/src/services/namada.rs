@@ -83,7 +83,7 @@ pub async fn get_governance_proposals_updates(
             }
         })
         .map(futures::future::ready)
-        .buffer_unordered(32)
+        .buffer_unordered(shared::utils::rpc_concurrency())
         .collect::<Vec<_>>()
         .await)
 }

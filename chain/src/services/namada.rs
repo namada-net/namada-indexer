@@ -177,7 +177,7 @@ pub async fn query_balance(
             })
         })
         .map(futures::future::ready)
-        .buffer_unordered(32)
+        .buffer_unordered(shared::utils::rpc_concurrency())
         .collect::<Vec<_>>()
         .await)
 }
@@ -342,22 +342,30 @@ pub async fn query_all_bonds_and_unbonds(
         for bd in details.bonds {
             let id = bond_id.clone();
             let key = (id.source, id.validator, bd.start);
+            let net_amount = bd
+                .amount
+                .checked_sub(bd.slashed_amount.unwrap_or_default())
+                .unwrap_or_default();
 
             if let Some(record) = bonds.get_mut(&key) {
-                *record = record.checked_add(bd.amount).unwrap();
+                *record = record.checked_add(net_amount).unwrap();
             } else {
-                bonds.insert(key, bd.amount);
+                bonds.insert(key, net_amount);
             }
         }
 
         for ud in details.unbonds {
             let id = bond_id.clone();
             let key = (id.source, id.validator, ud.withdraw);
+            let net_amount = ud
+                .amount
+                .checked_sub(ud.slashed_amount.unwrap_or_default())
+                .unwrap_or_default();
 
             if let Some(record) = unbonds.get_mut(&key) {
-                *record = record.checked_add(ud.amount).unwrap();
+                *record = record.checked_add(net_amount).unwrap();
             } else {
-                unbonds.insert(key, ud.amount);
+                unbonds.insert(key, net_amount);
             }
         }
     }
@@ -503,7 +511,7 @@ pub async fn query_bonds(
             Some(bonds)
         })
         .map(futures::future::ready)
-        .buffer_unordered(32)
+        .buffer_unordered(shared::utils::rpc_concurrency())
         .collect::<Vec<_>>()
         .await;
 
@@ -577,7 +585,7 @@ pub async fn query_unbonds(
             }
         })
         .map(futures::future::ready)
-        .buffer_unordered(32)
+        .buffer_unordered(shared::utils::rpc_concurrency())
         .collect::<Vec<_>>()
         .await;
 
@@ -610,7 +618,7 @@ pub async fn query_redelegations(
             })
         })
         .map(futures::future::ready)
-        .buffer_unordered(20)
+        .buffer_unordered(shared::utils::rpc_concurrency().min(20))
         .collect::<Vec<_>>()
         .await
         .into_iter()
@@ -656,16 +664,15 @@ pub async fn get_all_consensus_validators_addresses_at(
 pub async fn query_tx_code_hash(
     client: &HttpClient,
     tx_code_path: &str,
-) -> Option<String> {
+) -> anyhow::Result<Option<String>> {
     let storage_key = Key::wasm_hash(tx_code_path);
-    let tx_code_res =
-        query_storage_bytes(client, &storage_key, None).await.ok()?;
+    let tx_code_res = query_storage_bytes(client, &storage_key, None).await?;
     if let Some(tx_code_bytes) = tx_code_res {
         let tx_code =
             Hash::try_from(&tx_code_bytes[..]).expect("Invalid code hash");
-        Some(tx_code.to_string())
+        Ok(Some(tx_code.to_string()))
     } else {
-        None
+        Ok(None)
     }
 }
 
@@ -691,7 +698,7 @@ pub async fn query_tallies(
             Some((proposal, tally_type))
         })
         .map(futures::future::ready)
-        .buffer_unordered(32)
+        .buffer_unordered(shared::utils::rpc_concurrency())
         .collect::<Vec<_>>()
         .await;
 
@@ -723,7 +730,7 @@ pub async fn query_all_votes(
             Some(votes)
         })
         .map(futures::future::ready)
-        .buffer_unordered(32)
+        .buffer_unordered(shared::utils::rpc_concurrency())
         .collect::<Vec<_>>()
         .await;
 
@@ -838,7 +845,7 @@ pub async fn get_validator_set_at_epoch(
                 state: validator_state
             })
         })
-        .buffer_unordered(32)
+        .buffer_unordered(shared::utils::rpc_concurrency())
         .try_collect::<HashSet<_>>()
         .await?;
 
@@ -1004,7 +1011,7 @@ where
 
     let mut stream = futures::stream::iter(tokens)
         .map(|address| get_throughput_rate_limit(client, address, epoch))
-        .buffer_unordered(32);
+        .buffer_unordered(shared::utils::rpc_concurrency());
 
     while let Some(maybe_address) = stream.next().await {
         buffer.push(maybe_address?);
@@ -1063,7 +1070,7 @@ pub async fn query_all_redelegations(
                 })
                 .collect::<anyhow::Result<Vec<_>>>()
         })
-        .buffer_unordered(20)
+        .buffer_unordered(shared::utils::rpc_concurrency().min(20))
         .collect::<Vec<_>>()
         .await
         .into_iter()
@@ -1072,20 +1079,20 @@ pub async fn query_all_redelegations(
     Ok(nested_delegations.into_iter().flatten().collect())
 }
 
-pub async fn query_checksums(client: &HttpClient) -> Checksums {
+pub async fn query_checksums(client: &HttpClient) -> anyhow::Result<Checksums> {
     let mut checksums = Checksums::default();
     for code_path in Checksums::code_paths() {
-        let code =
-            query_tx_code_hash(client, &code_path)
-                .await
-                .unwrap_or_else(|| {
-                    panic!("{} must be defined in namada storage.", code_path)
-                });
+        let code = query_tx_code_hash(client, &code_path)
+            .await
+            .with_context(|| format!("Failed to query {} hash", code_path))?
+            .with_context(|| {
+                format!("{} must be defined in namada storage.", code_path)
+            })?;
 
         checksums.add(code_path, code.to_lowercase());
     }
 
-    checksums
+    Ok(checksums)
 }
 
 pub async fn get_validator_addresses_at_epoch(
